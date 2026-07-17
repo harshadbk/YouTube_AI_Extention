@@ -1,0 +1,216 @@
+import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
+import ReactMarkdown from "react-markdown";
+import { Send, Video, Bot, User, MessageSquare, Menu, X, Plus } from "lucide-react";
+
+function Home() {
+  const [url, setUrl] = useState("");
+  const [question, setQuestion] = useState("");
+  
+  // History state: { [url]: [{role, content}] }
+  const [chatHistory, setChatHistory] = useState({});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fetchingHistory, setFetchingHistory] = useState(true);
+  const chatEndRef = useRef(null);
+
+  // Fetch history from backend on load
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const resp = await axios.get("http://localhost:8000/history");
+        setChatHistory(resp.data);
+      } catch (err) {
+        console.error("Failed to load history from database", err);
+      } finally {
+        setFetchingHistory(false);
+      }
+    };
+    fetchHistory();
+  }, []);
+
+  // Active messages based on current URL
+  const messages = chatHistory[url] || [];
+
+  // Scroll to newest message
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, loading]);
+
+  const handleSend = async () => {
+    if (!url || !question || loading) return;
+    
+    const userMsg = { role: "user", content: question };
+    const currentQuestion = question;
+    
+    // Optimistic UI update
+    setChatHistory(prev => ({
+      ...prev,
+      [url]: [...(prev[url] || []), userMsg]
+    }));
+    
+    setLoading(true);
+    setQuestion("");
+    
+    try {
+      // Backend POST saves to SQLite
+      const resp = await axios.post("http://localhost:8000/chat", { url, question: currentQuestion });
+      const aiMsg = { role: "assistant", content: resp.data.answer };
+      
+      setChatHistory(prev => ({
+        ...prev,
+        [url]: [...(prev[url] || []), aiMsg]
+      }));
+    } catch (err) {
+      const errMsg = { role: "assistant", content: "Error: " + (err?.message ?? "unknown error") };
+      setChatHistory(prev => ({
+        ...prev,
+        [url]: [...(prev[url] || []), errMsg]
+      }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !loading) {
+      handleSend();
+    }
+  };
+  
+  const startNewChat = () => {
+    setUrl("");
+    setSidebarOpen(false);
+  };
+  
+  const loadChat = (targetUrl) => {
+    setUrl(targetUrl);
+    setSidebarOpen(false);
+  };
+
+  return (
+    <div className="app-wrapper">
+      {/* Sidebar Overlay */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+      
+      {/* Sidebar */}
+      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <h3>Chat History</h3>
+          <button className="icon-btn" onClick={() => setSidebarOpen(false)}>
+            <X size={20} />
+          </button>
+        </div>
+        
+        <button className="new-chat-btn" onClick={startNewChat}>
+          <Plus size={18} /> New Chat
+        </button>
+        
+        <div className="history-list">
+          {fetchingHistory && <div className="empty-history">Loading history...</div>}
+          {!fetchingHistory && Object.keys(chatHistory).length === 0 && (
+            <div className="empty-history">No past chats yet.</div>
+          )}
+          {Object.keys(chatHistory).reverse().map((chatUrl) => (
+            <div 
+              key={chatUrl} 
+              className={`history-item ${url === chatUrl ? 'active' : ''}`}
+              onClick={() => loadChat(chatUrl)}
+              title={chatUrl}
+            >
+              <Video size={16} className="history-icon" />
+              <div className="history-url">{chatUrl}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <header className="app-header">
+        <button className="icon-btn menu-btn" onClick={() => setSidebarOpen(true)}>
+          <Menu size={24} />
+        </button>
+        <h2>{url ? "Active Chat" : "New Chat"}</h2>
+      </header>
+      
+      <div className="chat-container">
+        <div className="chat-box">
+          {messages.length === 0 && (
+            <div className="empty-state">
+              <Bot size={64} opacity={0.5} color="var(--accent-color)" />
+              <h3>How can I help you today?</h3>
+              <p>Enter a YouTube URL below and ask me to summarize, explain, or answer questions about it.</p>
+            </div>
+          )}
+          
+          {messages.map((msg, i) => (
+            <div key={i} className={`message ${msg.role}`}>
+              <div className="message-avatar">
+                {msg.role === "user" ? <User size={18} /> : <Bot size={18} />}
+              </div>
+              <div className="message-content">
+                {msg.role === "assistant" ? (
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                ) : (
+                  msg.content
+                )}
+              </div>
+            </div>
+          ))}
+          
+          {loading && (
+            <div className="message assistant">
+              <div className="message-avatar">
+                <Bot size={18} />
+              </div>
+              <div className="typing-indicator">
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+              </div>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+        
+        <div className="input-area">
+          <div className="input-group">
+            <Video className="input-icon" size={18} />
+            <input
+              type="text"
+              placeholder="Paste YouTube URL here..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="input url-input"
+            />
+          </div>
+          
+          <div style={{ display: 'flex' }}>
+            <div className="input-group" style={{ flex: 1 }}>
+              <MessageSquare className="input-icon" size={18} />
+              <input
+                type="text"
+                placeholder="Ask a question..."
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                className="input question-input"
+                onKeyDown={handleKey}
+                disabled={loading}
+              />
+            </div>
+            <button 
+              onClick={handleSend} 
+              className="send-btn" 
+              disabled={loading || !question.trim() || !url.trim()}
+            >
+              <Send size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Home;

@@ -1,184 +1,200 @@
 import os
 import re
+from typing import List, Dict
 from dotenv import load_dotenv
-
 from youtube_transcript_api import YouTubeTranscriptApi
-
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-# ---------------------------------
-# Load Environment Variables
-# ---------------------------------
+_vector_cache: dict[str, FAISS] = {}
 
 load_dotenv()
 
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
-os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-GROQ_MODEL = os.getenv("GROQ_MODEL")
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY not found in .env")
 
-# ---------------------------------
+os.environ["GROQ_API_KEY"] = GROQ_API_KEY
+
+# Initialize LLM at module level for reuse
+llm = ChatGroq(model=MODEL, temperature=0)
+
+def answer_question(url: str, question: str, history: List[Dict] = None) -> str:
+    """Return an answer for *question* about the YouTube video at *url*.
+    Accepts an optional *history* list of {role, content} dicts to maintain
+    conversation memory across multiple turns.
+    The transcript and vector store are cached per video ID.
+    """
+    video_id = extract_video_id(url)
+
+    # Reuse cached vector store if available
+    if video_id in _vector_cache:
+        vectorstore = _vector_cache[video_id]
+    else:
+        transcript = get_transcript(video_id)
+        vectorstore = create_vector_store(transcript)
+        _vector_cache[video_id] = vectorstore
+
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
+    docs = retriever.invoke(question)
+    context = "\n\n".join(doc.page_content for doc in docs)
+
+    # Build LangChain message history from previous turns
+    lc_history = []
+    if history:
+        for msg in history:
+            if msg["role"] == "user":
+                lc_history.append(HumanMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                lc_history.append(AIMessage(content=msg["content"]))
+
+    # Build the full message list: system + history + current question
+    system_msg = SystemMessage(content=f"""You are a friendly and helpful YouTube AI assistant.
+If the user greets you (e.g., "Hi", "Hello"), respond warmly and ask how you can help them with the video.
+
+For video-related questions, answer using the transcript context below. 
+Format responses using Markdown bullet points for lists, summaries, or step-by-step explanations.
+If the answer is not in the transcript, say you couldn't find it but offer helpful general knowledge if relevant.
+You also have access to the previous conversation — use it to answer follow-up questions naturally.
+
+Transcript Context:
+{context}""")
+
+    messages = [system_msg] + lc_history + [HumanMessage(content=question)]
+    response = llm.invoke(messages)
+    return response.content
+
+
+# ----------------------------
 # Extract Video ID
-# ---------------------------------
+# ----------------------------
 
 def extract_video_id(url):
+    patterns = [
+        r"(?:v=)([0-9A-Za-z_-]{11})",
+        r"youtu\.be/([0-9A-Za-z_-]{11})",
+        r"embed/([0-9A-Za-z_-]{11})",
+        r"shorts/([0-9A-Za-z_-]{11})",
+    ]
 
-    pattern = r"(?:v=|\/)([0-9A-Za-z_-]{11})"
-
-    match = re.search(pattern, url)
-
-    if match:
-        return match.group(1)
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
 
     raise ValueError("Invalid YouTube URL")
 
-# ---------------------------------
+
+# ----------------------------
 # Fetch Transcript
-# ---------------------------------
+# ----------------------------
 
 def get_transcript(video_id):
+    api = YouTubeTranscriptApi()
 
-    ytt = YouTubeTranscriptApi()
-
-    transcript_list = ytt.list(video_id)
+    transcript_list = api.list(video_id)
 
     try:
         transcript = transcript_list.find_manually_created_transcript(
             ["mr", "hi", "en"]
         )
-
     except:
-
         try:
             transcript = transcript_list.find_generated_transcript(
                 ["mr", "hi", "en"]
             )
-
         except:
             transcript = next(iter(transcript_list))
 
     fetched = transcript.fetch()
 
-    transcript_text = " ".join(chunk.text for chunk in fetched)
+    return " ".join(chunk.text for chunk in fetched)
 
-    return transcript_text
 
-# ---------------------------------
-# Create Vector Store
-# ---------------------------------
+# ----------------------------
+# Vector Store
+# ----------------------------
 
 def create_vector_store(text):
-
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
+        chunk_size=2000,
+        chunk_overlap=400,
     )
 
     docs = splitter.create_documents([text])
 
-    embeddings = OpenAIEmbeddings(
-        model="text-embedding-3-small"
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
-    vectorstore = FAISS.from_documents(
-        docs,
-        embeddings
-    )
+    return FAISS.from_documents(docs, embeddings)
 
-    return vectorstore
 
-# ---------------------------------
-# Prompt
-# ---------------------------------
 
-prompt = PromptTemplate(
-    template="""
-You are an AI assistant that answers questions ONLY using the provided YouTube transcript.
 
-Rules:
-1. Answer ONLY from the transcript context.
-2. Do not make up facts.
-3. If the answer is not available, reply:
-   "I couldn't find that information in the video."
-4. Reply in the SAME language as the user's question.
-   - English → English
-   - Hindi → Hindi
-   - Marathi → Marathi
-5. Keep answers clear and concise.
-6. If appropriate, summarize information from multiple transcript sections.
-
-Transcript:
-{context}
-
-Question:
-{question}
-
-Answer:
-""",
-    input_variables=["context", "question"],
-)
-
-# ---------------------------------
+# ----------------------------
 # Main
-# ---------------------------------
+# ----------------------------
 
 def main():
 
     url = input("Enter YouTube URL: ")
 
-    print("\nExtracting Video ID...")
-
     video_id = extract_video_id(url)
 
-    print("Fetching Transcript...")
+    print("Fetching transcript...")
 
     transcript = get_transcript(video_id)
 
-    print("Transcript Loaded Successfully!")
+    print("Transcript Loaded.")
 
-    print("Creating Vector Database...")
+    print("Creating embeddings...")
 
     vectorstore = create_vector_store(transcript)
 
     retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 4}
+        search_kwargs={"k":10}
     )
 
     llm = ChatGroq(
-        model=GROQ_MODEL,
+        model=MODEL,
         temperature=0
     )
 
-    qa = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever,
-        chain_type_kwargs={
-            "prompt": prompt
-        },
-        return_source_documents=True
-    )
-
-    print("\n======================================")
+    print("\n===========================")
     print("YouTube AI Chat Started")
     print("Type 'exit' to quit.")
-    print("======================================")
+    print("===========================")
 
     while True:
 
-        query = input("\nYou : ")
+        question = input("\nYou : ")
 
-        if query.lower() in ["exit", "quit"]:
+        if question.lower() == "exit":
             break
 
-        response = qa.invoke({"query": query})
+        docs = retriever.invoke(question)
 
-        print("\nAI :", response["result"])
+        context = "\n\n".join(
+            doc.page_content for doc in docs
+        )
+
+        messages = prompt.invoke(
+            {
+                "context": context,
+                "question": question,
+            }
+        )
+
+        response = llm.invoke(messages)
+
+        print("\nAI:", response.content)
 
 
 if __name__ == "__main__":
