@@ -1,13 +1,20 @@
 import os
+import sys
 import sqlite3
+import traceback
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
 
+# Ensure backend root is on sys.path
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv())
 
 # Import RAG utilities
 from rag import answer_question
@@ -22,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_FILE = "chats.db"
+DB_FILE = os.path.join(BACKEND_DIR, "chats.db")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
