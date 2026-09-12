@@ -17,7 +17,16 @@ This is a production-ready FastAPI backend for an AI-powered YouTube Chat applic
 
 3. Configure Environment Variables:
    - Copy `.env.example` to `.env`
-   - Fill in your `OPENAI_API_KEY` and `GROQ_API_KEY`.
+   - Fill in `OPENAI_API_KEY`, `GROQ_API_KEY`, and your MongoDB Atlas `MONGODB_URI`.
+
+Chat history is stored in the configured MongoDB database (`youtube_ai_extension` by
+default). The connection string is read from `MONGODB_URI`; it is never stored in
+source code.
+
+Authentication creates a `users` collection with hashed passwords. Use
+`POST /auth/register` or `POST /auth/login` to receive a bearer token. Send that
+token with `GET /history` and `POST /chat`; messages are stored with the user's ID
+in the `user` field and are isolated per account.
 
 4. Run the server:
    ```bash

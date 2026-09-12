@@ -3,7 +3,7 @@ import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { Send, Video, Bot, User, MessageSquare, Menu, X, Plus } from "lucide-react";
 
-function Home() {
+function Home({ token }) {
   const [url, setUrl] = useState("");
   const [question, setQuestion] = useState("");
   
@@ -18,7 +18,7 @@ function Home() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const resp = await axios.get("http://localhost:8000/history");
+        const resp = await axios.get("http://localhost:8000/history", { headers: { Authorization: `Bearer ${token}` } });
         setChatHistory(resp.data);
       } catch (err) {
         console.error("Failed to load history from database", err);
@@ -27,7 +27,7 @@ function Home() {
       }
     };
     fetchHistory();
-  }, []);
+  }, [token]);
 
   // Active messages based on current URL
   const messages = chatHistory[url] || [];
@@ -55,8 +55,7 @@ function Home() {
     setQuestion("");
     
     try {
-      // Backend POST saves to SQLite
-      const resp = await axios.post("http://localhost:8000/chat", { url, question: currentQuestion });
+      const resp = await axios.post("http://localhost:8000/chat", { url, question: currentQuestion }, { headers: { Authorization: `Bearer ${token}` } });
       const aiMsg = { role: "assistant", content: resp.data.answer };
       
       setChatHistory(prev => ({
@@ -131,6 +130,7 @@ function Home() {
         <button className="icon-btn menu-btn" onClick={() => setSidebarOpen(true)}>
           <Menu size={24} />
         </button>
+        <Video className="header-icon" size={24} />
         <h2>{url ? "Active Chat" : "New Chat"}</h2>
       </header>
       

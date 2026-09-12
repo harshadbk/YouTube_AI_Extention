@@ -11,3 +11,6 @@ faiss-cpu==1.8.0
 youtube-transcript-api==0.6.2
 python-dotenv==1.0.1
 langchain_huggingface==0.0.13
+pymongo==4.15.0
+python-jose==3.3.0
+bcrypt==4.3.0
