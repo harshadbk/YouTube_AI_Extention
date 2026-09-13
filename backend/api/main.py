@@ -2,14 +2,35 @@ import os
 import sys
 from datetime import datetime, timezone
 from uuid import uuid4
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from pymongo import ASCENDING, MongoClient
 import bcrypt
 from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+
+import traceback
+
+app = FastAPI()
+
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        print("\n" + "="*50)
+        print("!!! CRITICAL SERVER CRASH DETECTED IN CHAT ROUTE !!!")
+        print(f"Error Message: {str(e)}")
+        print("="*50)
+        traceback.print_exc()
+        print("="*50 + "\n")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Server Error: {str(e)}"}
+        )
 
 # Ensure backend root is on sys.path
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,8 +42,6 @@ load_dotenv(find_dotenv())
 
 # Import RAG utilities
 from rag import answer_question
-
-app = FastAPI()
 
 # Allow all origins for development
 app.add_middleware(
