@@ -18,7 +18,7 @@ function Home({ token }) {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const resp = await axios.get("http://localhost:8000/history", { headers: { Authorization: `Bearer ${token}` } });
+        const resp = await axios.get("https://youtubeai.hostelmanagement.online/history", { headers: { Authorization: `Bearer ${token}` } });
         setChatHistory(resp.data);
       } catch (err) {
         console.error("Failed to load history from database", err);
@@ -55,7 +55,7 @@ function Home({ token }) {
     setQuestion("");
     
     try {
-      const resp = await axios.post("http://localhost:8000/chat", { url, question: currentQuestion }, { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await axios.post("https://youtubeai.hostelmanagement.online/chat", { url, question: currentQuestion }, { headers: { Authorization: `Bearer ${token}` } });
       const aiMsg = { role: "assistant", content: resp.data.answer };
       
       setChatHistory(prev => ({

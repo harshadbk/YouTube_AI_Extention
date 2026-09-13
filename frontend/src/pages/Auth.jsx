@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { LogIn, UserPlus, Video } from "lucide-react";
 
-const API_URL = "http://localhost:8000";
+const API_URL = "https://youtubeai.hostelmanagement.online";
 
 function Auth({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
