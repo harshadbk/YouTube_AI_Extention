@@ -45,7 +45,7 @@ if BACKEND_DIR not in sys.path:
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 # Import RAG utilities
-from rag import answer_question
+from rag import TranscriptUnavailableError, answer_question
 
 # Allow all origins for development
 app.add_middleware(
@@ -202,6 +202,9 @@ async def chat(req: QueryRequest, user=Depends(current_user)):
         })
         
         return {"answer": answer}
+    except TranscriptUnavailableError as error:
+        logger.warning("Transcript unavailable for %s: %s", req.url, error)
+        raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as e:
         logger.exception("Chat request failed during %s for video URL %s", stage, req.url)
         raise HTTPException(status_code=500, detail=str(e))

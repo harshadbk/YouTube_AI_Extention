@@ -3,6 +3,7 @@ import re
 from typing import List, Dict
 from dotenv import load_dotenv
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import CouldNotRetrieveTranscript
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -11,6 +12,10 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 _vector_cache: dict[str, FAISS] = {}
+
+
+class TranscriptUnavailableError(RuntimeError):
+    """Raised when YouTube does not provide captions to this server."""
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
@@ -99,24 +104,31 @@ def extract_video_id(url):
 def get_transcript(video_id):
     api = YouTubeTranscriptApi()
 
-    if hasattr(api, "list"):
-        transcript_list = api.list(video_id)
-    else:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-
     try:
-        transcript = transcript_list.find_manually_created_transcript(
-            ["mr", "hi", "en"]
-        )
-    except Exception:
+        if hasattr(api, "list"):
+            transcript_list = api.list(video_id)
+        else:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
         try:
-            transcript = transcript_list.find_generated_transcript(
+            transcript = transcript_list.find_manually_created_transcript(
                 ["mr", "hi", "en"]
             )
         except Exception:
-            transcript = next(iter(transcript_list))
+            try:
+                transcript = transcript_list.find_generated_transcript(
+                    ["mr", "hi", "en"]
+                )
+            except Exception:
+                transcript = next(iter(transcript_list))
 
-    fetched = transcript.fetch()
+        fetched = transcript.fetch()
+    except CouldNotRetrieveTranscript as error:
+        raise TranscriptUnavailableError(
+            "YouTube captions could not be retrieved from this server. "
+            "The video may have captions disabled, or YouTube may be blocking "
+            "the EC2 server IP. Try another video or configure a proxy."
+        ) from error
 
     return " ".join(
         chunk["text"] if isinstance(chunk, dict) else chunk.text
