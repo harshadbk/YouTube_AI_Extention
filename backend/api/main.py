@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -9,10 +10,12 @@ from jose import JWTError, jwt
 from pymongo import ASCENDING, MongoClient
 import bcrypt
 from pydantic import BaseModel
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 
 import traceback
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -37,8 +40,9 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-# Load environment variables
-load_dotenv(find_dotenv())
+# Load environment variables from the backend directory regardless of the
+# process working directory.
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 # Import RAG utilities
 from rag import answer_question
@@ -166,6 +170,7 @@ class QueryRequest(BaseModel):
 
 @app.post("/chat")
 async def chat(req: QueryRequest, user=Depends(current_user)):
+    stage = "load conversation history"
     try:
         # Fetch existing conversation history for this URL to provide memory
         previous_messages = messages.find(
@@ -183,9 +188,11 @@ async def chat(req: QueryRequest, user=Depends(current_user)):
         })
         
         # Get AI answer — pass full history for context memory
+        stage = "generate AI answer"
         answer = answer_question(req.url, req.question, history)
         
         # Save AI answer
+        stage = "save AI answer"
         messages.insert_one({
             "user": user["_id"],
             "url": req.url,
@@ -196,4 +203,5 @@ async def chat(req: QueryRequest, user=Depends(current_user)):
         
         return {"answer": answer}
     except Exception as e:
+        logger.exception("Chat request failed during %s for video URL %s", stage, req.url)
         raise HTTPException(status_code=500, detail=str(e))

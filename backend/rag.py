@@ -12,7 +12,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 _vector_cache: dict[str, FAISS] = {}
 
-load_dotenv()
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
