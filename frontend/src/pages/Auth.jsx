@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { LogIn, UserPlus, Video } from "lucide-react";
-
-const API_URL = "https://youtubeai.hostelmanagement.online";
+import { API_URL } from "../config";
 
 function Auth({ onAuthenticated }) {
   const [mode, setMode] = useState("login");

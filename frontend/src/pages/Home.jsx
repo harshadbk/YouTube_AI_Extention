@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { Send, Video, Bot, User, MessageSquare, Menu, X, Plus } from "lucide-react";
+import { API_URL } from "../config";
 
 function Home({ token }) {
   const [url, setUrl] = useState("");
@@ -18,7 +19,7 @@ function Home({ token }) {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const resp = await axios.get("https://youtubeai.hostelmanagement.online/history", { headers: { Authorization: `Bearer ${token}` } });
+        const resp = await axios.get(`${API_URL}/history`, { headers: { Authorization: `Bearer ${token}` } });
         setChatHistory(resp.data);
       } catch (err) {
         console.error("Failed to load history from database", err);
@@ -55,7 +56,7 @@ function Home({ token }) {
     setQuestion("");
     
     try {
-      const resp = await axios.post("https://youtubeai.hostelmanagement.online/chat", { url, question: currentQuestion }, { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await axios.post(`${API_URL}/chat`, { url, question: currentQuestion }, { headers: { Authorization: `Bearer ${token}` } });
       const aiMsg = { role: "assistant", content: resp.data.answer };
       
       setChatHistory(prev => ({
