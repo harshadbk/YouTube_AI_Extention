@@ -99,23 +99,29 @@ def extract_video_id(url):
 def get_transcript(video_id):
     api = YouTubeTranscriptApi()
 
-    transcript_list = api.list(video_id)
+    if hasattr(api, "list"):
+        transcript_list = api.list(video_id)
+    else:
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
     try:
         transcript = transcript_list.find_manually_created_transcript(
             ["mr", "hi", "en"]
         )
-    except:
+    except Exception:
         try:
             transcript = transcript_list.find_generated_transcript(
                 ["mr", "hi", "en"]
             )
-        except:
+        except Exception:
             transcript = next(iter(transcript_list))
 
     fetched = transcript.fetch()
 
-    return " ".join(chunk.text for chunk in fetched)
+    return " ".join(
+        chunk["text"] if isinstance(chunk, dict) else chunk.text
+        for chunk in fetched
+    )
 
 
 # ----------------------------
