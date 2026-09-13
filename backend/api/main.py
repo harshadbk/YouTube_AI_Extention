@@ -45,7 +45,7 @@ if BACKEND_DIR not in sys.path:
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 # Import RAG utilities
-from rag import TranscriptUnavailableError, answer_question
+from rag import TranscriptUnavailableError, answer_question, extract_video_id, get_transcript
 
 # Allow all origins for development
 app.add_middleware(
@@ -167,6 +167,18 @@ async def get_history(user=Depends(current_user)):
 class QueryRequest(BaseModel):
     url: str
     question: str
+    transcript_text: str | None = None
+
+@app.get("/transcript")
+async def transcript(url: str, user=Depends(current_user)):
+    try:
+        return {"transcript_text": get_transcript(extract_video_id(url))}
+    except TranscriptUnavailableError as error:
+        logger.warning("Transcript unavailable for %s: %s", url, error)
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Transcript request failed for %s", url)
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 @app.post("/chat")
 async def chat(req: QueryRequest, user=Depends(current_user)):
@@ -189,7 +201,12 @@ async def chat(req: QueryRequest, user=Depends(current_user)):
         
         # Get AI answer — pass full history for context memory
         stage = "generate AI answer"
-        answer = answer_question(req.url, req.question, history)
+        answer = answer_question(
+            req.url,
+            req.question,
+            history,
+            transcript_text=req.transcript_text,
+        )
         
         # Save AI answer
         stage = "save AI answer"

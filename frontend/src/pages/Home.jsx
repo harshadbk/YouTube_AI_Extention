@@ -56,7 +56,15 @@ function Home({ token }) {
     setQuestion("");
     
     try {
-      const resp = await axios.post(`${API_URL}/chat`, { url, question: currentQuestion }, { headers: { Authorization: `Bearer ${token}` } });
+      const transcriptResponse = await axios.get(`${API_URL}/transcript`, {
+        params: { url },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const resp = await axios.post(`${API_URL}/chat`, {
+        url,
+        question: currentQuestion,
+        transcript_text: transcriptResponse.data.transcript_text,
+      }, { headers: { Authorization: `Bearer ${token}` } });
       const aiMsg = { role: "assistant", content: resp.data.answer };
       
       setChatHistory(prev => ({

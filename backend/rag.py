@@ -30,7 +30,12 @@ os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 # Initialize LLM at module level for reuse
 llm = ChatGroq(model=MODEL, temperature=0)
 
-def answer_question(url: str, question: str, history: List[Dict] = None) -> str:
+def answer_question(
+    url: str,
+    question: str,
+    history: List[Dict] = None,
+    transcript_text: str | None = None,
+) -> str:
     """Return an answer for *question* about the YouTube video at *url*.
     Accepts an optional *history* list of {role, content} dicts to maintain
     conversation memory across multiple turns.
@@ -38,11 +43,14 @@ def answer_question(url: str, question: str, history: List[Dict] = None) -> str:
     """
     video_id = extract_video_id(url)
 
-    # Reuse cached vector store if available
-    if video_id in _vector_cache:
+    # Reuse cached stores only for server-fetched transcripts. Browser-provided
+    # text may be newer than the cached version.
+    if transcript_text:
+        vectorstore = create_vector_store(transcript_text)
+    elif video_id in _vector_cache:
         vectorstore = _vector_cache[video_id]
     else:
-        transcript = get_transcript(video_id)
+        transcript = transcript_text or get_transcript(video_id)
         vectorstore = create_vector_store(transcript)
         _vector_cache[video_id] = vectorstore
 
@@ -101,25 +109,43 @@ def extract_video_id(url):
 # ----------------------------
 
 def get_transcript(video_id):
+    proxy_url = os.getenv("YOUTUBE_PROXY")
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+    cookies_path = os.getenv("YOUTUBE_COOKIES_FILE")
+    if cookies_path and not os.path.isfile(cookies_path):
+        raise TranscriptUnavailableError(
+            f"YouTube cookies file was not found: {cookies_path}"
+        )
     api = YouTubeTranscriptApi()
 
     try:
+        # Version 0.6.x uses get_transcript and accepts requests proxies.
+        if hasattr(YouTubeTranscriptApi, "get_transcript"):
+            fetched = YouTubeTranscriptApi.get_transcript(
+                video_id,
+                languages=("en", "hi", "mr"),
+                proxies=proxies,
+                cookies=cookies_path,
+            )
+            return " ".join(chunk["text"] for chunk in fetched)
+
         # Direct fetch avoids the caption-list endpoint, which is more likely
         # to be blocked or fail on cloud server IPs.
         if hasattr(api, "fetch"):
-            try:
-                fetched = api.fetch(video_id, languages=("en", "hi", "mr"))
-                return " ".join(
-                    chunk["text"] if isinstance(chunk, dict) else chunk.text
-                    for chunk in fetched
-                )
-            except Exception:
-                pass
+            fetched = api.fetch(video_id, languages=("en", "hi", "mr"))
+            return " ".join(
+                chunk["text"] if isinstance(chunk, dict) else chunk.text
+                for chunk in fetched
+            )
 
         if hasattr(api, "list"):
             transcript_list = api.list(video_id)
         else:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = YouTubeTranscriptApi.list_transcripts(
+                video_id,
+                proxies=proxies,
+                cookies=cookies_path,
+            )
 
         try:
             transcript = transcript_list.find_manually_created_transcript(

@@ -23,6 +23,10 @@ Chat history is stored in the configured MongoDB database (`youtube_ai_extension
 default). The connection string is read from `MONGODB_URI`; it is never stored in
 source code.
 
+If YouTube blocks transcript requests from the EC2 public IP, set
+`YOUTUBE_PROXY` in `.env` to an HTTP or HTTPS proxy URL. The transcript client
+uses that proxy for both HTTP and HTTPS requests.
+
 Authentication creates a `users` collection with hashed passwords. Use
 `POST /auth/register` or `POST /auth/login` to receive a bearer token. Send that
 token with `GET /history` and `POST /chat`; messages are stored with the user's ID
