@@ -3,7 +3,6 @@ import re
 from typing import List, Dict
 from dotenv import load_dotenv
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import CouldNotRetrieveTranscript
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -105,6 +104,18 @@ def get_transcript(video_id):
     api = YouTubeTranscriptApi()
 
     try:
+        # Direct fetch avoids the caption-list endpoint, which is more likely
+        # to be blocked or fail on cloud server IPs.
+        if hasattr(api, "fetch"):
+            try:
+                fetched = api.fetch(video_id, languages=("en", "hi", "mr"))
+                return " ".join(
+                    chunk["text"] if isinstance(chunk, dict) else chunk.text
+                    for chunk in fetched
+                )
+            except Exception:
+                pass
+
         if hasattr(api, "list"):
             transcript_list = api.list(video_id)
         else:
@@ -123,7 +134,7 @@ def get_transcript(video_id):
                 transcript = next(iter(transcript_list))
 
         fetched = transcript.fetch()
-    except CouldNotRetrieveTranscript as error:
+    except Exception as error:
         raise TranscriptUnavailableError(
             "YouTube captions could not be retrieved from this server. "
             "The video may have captions disabled, or YouTube may be blocking "
