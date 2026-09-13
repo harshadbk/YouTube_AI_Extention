@@ -27,6 +27,11 @@ If YouTube blocks transcript requests from the EC2 public IP, set
 `YOUTUBE_PROXY` in `.env` to an HTTP or HTTPS proxy URL. The transcript client
 uses that proxy for both HTTP and HTTPS requests.
 
+To use a RapidAPI transcript provider instead, configure `RAPIDAPI_KEY`,
+`RAPIDAPI_HOST`, and `RAPIDAPI_TRANSCRIPT_URL` in `.env`. The endpoint must
+accept the video ID using the parameter named by `RAPIDAPI_VIDEO_PARAMETER`
+(default: `videoId`). RapidAPI is used automatically when `RAPIDAPI_KEY` is set.
+
 Authentication creates a `users` collection with hashed passwords. Use
 `POST /auth/register` or `POST /auth/login` to receive a bearer token. Send that
 token with `GET /history` and `POST /chat`; messages are stored with the user's ID

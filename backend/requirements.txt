@@ -14,3 +14,4 @@ langchain_huggingface==0.0.13
 pymongo==4.15.0
 python-jose==3.3.0
 bcrypt==4.3.0
+requests==2.32.3

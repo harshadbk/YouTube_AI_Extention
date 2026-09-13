@@ -1,6 +1,8 @@
 import os
 import re
+import logging
 from typing import List, Dict
+import requests
 from dotenv import load_dotenv
 from youtube_transcript_api import YouTubeTranscriptApi
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -11,6 +13,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 _vector_cache: dict[str, FAISS] = {}
+logger = logging.getLogger(__name__)
 
 
 class TranscriptUnavailableError(RuntimeError):
@@ -54,18 +57,19 @@ def answer_question(
         vectorstore = create_vector_store(transcript)
         _vector_cache[video_id] = vectorstore
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
     docs = retriever.invoke(question)
-    context = "\n\n".join(doc.page_content for doc in docs)
+    context = "\n\n".join(doc.page_content for doc in docs)[:10000]
 
     # Build LangChain message history from previous turns
     lc_history = []
     if history:
-        for msg in history:
+        for msg in history[-6:]:
+            content = msg["content"][:1500]
             if msg["role"] == "user":
-                lc_history.append(HumanMessage(content=msg["content"]))
+                lc_history.append(HumanMessage(content=content))
             elif msg["role"] == "assistant":
-                lc_history.append(AIMessage(content=msg["content"]))
+                lc_history.append(AIMessage(content=content))
 
     # Build the full message list: system + history + current question
     system_msg = SystemMessage(content=f"""You are a friendly and helpful YouTube AI assistant.
@@ -109,6 +113,10 @@ def extract_video_id(url):
 # ----------------------------
 
 def get_transcript(video_id):
+    rapidapi_key = os.getenv("RAPIDAPI_KEY")
+    if rapidapi_key:
+        return get_rapidapi_transcript(video_id, rapidapi_key)
+
     proxy_url = os.getenv("YOUTUBE_PROXY")
     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     cookies_path = os.getenv("YOUTUBE_COOKIES_FILE")
@@ -161,6 +169,7 @@ def get_transcript(video_id):
 
         fetched = transcript.fetch()
     except Exception as error:
+        logger.exception("YouTube transcript retrieval failed for video %s", video_id)
         raise TranscriptUnavailableError(
             "YouTube captions could not be retrieved from this server. "
             "The video may have captions disabled, or YouTube may be blocking "
@@ -171,6 +180,55 @@ def get_transcript(video_id):
         chunk["text"] if isinstance(chunk, dict) else chunk.text
         for chunk in fetched
     )
+
+
+def get_rapidapi_transcript(video_id, rapidapi_key):
+    """Fetch captions from the configured RapidAPI transcript provider."""
+    endpoint = os.getenv("RAPIDAPI_TRANSCRIPT_URL")
+    host = os.getenv("RAPIDAPI_HOST")
+    parameter = os.getenv("RAPIDAPI_VIDEO_PARAMETER", "videoId")
+    if not endpoint or not host:
+        raise TranscriptUnavailableError(
+            "RAPIDAPI_TRANSCRIPT_URL and RAPIDAPI_HOST must be configured"
+        )
+
+    try:
+        response = requests.get(
+            endpoint,
+            params={parameter: video_id},
+            headers={
+                "x-rapidapi-key": rapidapi_key,
+                "x-rapidapi-host": host,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        text = extract_transcript_text(response.json())
+        if not text:
+            raise ValueError("RapidAPI returned no transcript text")
+        return text
+    except Exception as error:
+        logger.exception("RapidAPI transcript retrieval failed for video %s", video_id)
+        raise TranscriptUnavailableError(
+            "The configured RapidAPI transcript service could not return captions. "
+            "Check its endpoint, host, API key, and quota."
+        ) from error
+
+
+def extract_transcript_text(payload):
+    """Extract text from common RapidAPI transcript response shapes."""
+    if isinstance(payload, str):
+        return payload.strip()
+    if isinstance(payload, list):
+        parts = [extract_transcript_text(item) for item in payload]
+        return " ".join(part for part in parts if part)
+    if isinstance(payload, dict):
+        for key in ("text", "transcript", "captions", "data", "result", "items"):
+            if key in payload:
+                text = extract_transcript_text(payload[key])
+                if text:
+                    return text
+    return ""
 
 
 # ----------------------------
