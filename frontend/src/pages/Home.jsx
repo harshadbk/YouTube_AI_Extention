@@ -64,7 +64,8 @@ function Home({ token }) {
         [url]: [...(prev[url] || []), aiMsg]
       }));
     } catch (err) {
-      const errMsg = { role: "assistant", content: "Error: " + (err?.message ?? "unknown error") };
+      const serverMessage = err?.response?.data?.detail;
+      const errMsg = { role: "assistant", content: "Error: " + (serverMessage ?? err?.message ?? "unknown error") };
       setChatHistory(prev => ({
         ...prev,
         [url]: [...(prev[url] || []), errMsg]
