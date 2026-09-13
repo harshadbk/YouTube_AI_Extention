@@ -187,8 +187,9 @@ async def chat(req: QueryRequest, user=Depends(current_user)):
         # Fetch existing conversation history for this URL to provide memory
         previous_messages = messages.find(
             {"user": user["_id"], "url": req.url}, {"_id": 0, "role": 1, "content": 1}
-        ).sort("created_at", ASCENDING)
+        ).sort("created_at", -1).limit(6)
         history = [{"role": item["role"], "content": item["content"]} for item in previous_messages]
+        history.reverse()
 
         # Save user question
         messages.insert_one({

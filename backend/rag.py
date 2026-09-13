@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import hashlib
 from typing import List, Dict
 import requests
 from dotenv import load_dotenv
@@ -13,6 +14,8 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 _vector_cache: dict[str, FAISS] = {}
+_transcript_hashes: dict[str, str] = {}
+_embeddings = None
 logger = logging.getLogger(__name__)
 
 
@@ -46,16 +49,14 @@ def answer_question(
     """
     video_id = extract_video_id(url)
 
-    # Reuse cached stores only for server-fetched transcripts. Browser-provided
-    # text may be newer than the cached version.
-    if transcript_text:
-        vectorstore = create_vector_store(transcript_text)
-    elif video_id in _vector_cache:
+    transcript_hash = hashlib.sha256(transcript_text.encode()).hexdigest() if transcript_text else None
+    if video_id in _vector_cache and _transcript_hashes.get(video_id) == transcript_hash:
         vectorstore = _vector_cache[video_id]
     else:
         transcript = transcript_text or get_transcript(video_id)
         vectorstore = create_vector_store(transcript)
         _vector_cache[video_id] = vectorstore
+        _transcript_hashes[video_id] = transcript_hash
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
     docs = retriever.invoke(question)
@@ -236,6 +237,7 @@ def extract_transcript_text(payload):
 # ----------------------------
 
 def create_vector_store(text):
+    global _embeddings
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=2000,
         chunk_overlap=400,
@@ -243,11 +245,10 @@ def create_vector_store(text):
 
     docs = splitter.create_documents([text])
 
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    if _embeddings is None:
+        _embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-    return FAISS.from_documents(docs, embeddings)
+    return FAISS.from_documents(docs, _embeddings)
 
 
 
