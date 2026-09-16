@@ -43,6 +43,7 @@ function App() {
         <Route path="/login" element={<Auth page="login" onAuthenticated={handleAuthenticated} />} />
         <Route path="/register" element={<Auth page="register" onAuthenticated={handleAuthenticated} />} />
         <Route path="/verify-email" element={<Auth page="verify" onAuthenticated={handleAuthenticated} />} />
+        <Route path="/forgot-password" element={<Auth page="forgot" onAuthenticated={handleAuthenticated} />} />
         <Route path="/auth/google/callback" element={<GoogleCallback onAuthenticated={handleAuthenticated} />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -76,6 +77,7 @@ function App() {
           <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/register" element={<Navigate to="/" replace />} />
           <Route path="/verify-email" element={<Navigate to="/" replace />} />
+          <Route path="/forgot-password" element={<Navigate to="/" replace />} />
           <Route path="/auth/google/callback" element={<Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -83,7 +85,7 @@ function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <div>&copy; 2026 YouTube AI Assistant. Developed by <strong>Harshad Khatale</strong>.</div>
+        <div>&copy; 2026 YouTube AI Assistant. { /*Developed by <strong>Harshad Khatale</strong>.*/}</div>
         <div className="footer-links">
           <a>Privacy Policy</a>
           <a>Terms of Service</a>

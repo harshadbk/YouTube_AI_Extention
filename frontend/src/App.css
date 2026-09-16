@@ -230,6 +230,16 @@
 
 .auth-switch:hover { color: var(--accent-color); }
 
+.auth-links {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.auth-links .auth-switch {
+  margin-top: 0;
+}
+
 .profile-page {
   width: min(100%, 620px);
   margin: 0 auto;

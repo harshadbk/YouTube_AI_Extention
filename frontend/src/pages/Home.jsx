@@ -37,6 +37,77 @@ function Home({ token }) {
   const activeChat = chatHistory[url] || { title: "", messages: [] };
   const messages = activeChat.messages;
 
+  const normalizeYouTubeUrl = (input) => {
+    if (!input || typeof input !== "string") return "";
+
+    const trimmed = input.trim();
+    if (!trimmed) return "";
+
+    const getVideoIdFromPath = (pathname) => {
+      if (!pathname) return "";
+      const cleanPath = pathname.replace(/^\/+|\/+$/g, "");
+      if (!cleanPath) return "";
+
+      const segments = cleanPath.split("/");
+      const videoId = segments.find((segment, index) => {
+        const previous = segments[index - 1];
+        return (
+          segment &&
+          /^[A-Za-z0-9_-]{11}$/.test(segment) &&
+          (previous === "shorts" || previous === "embed" || previous === "watch" || !previous)
+        );
+      });
+
+      return videoId || "";
+    };
+
+    try {
+      const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      const parsed = new URL(withProtocol);
+      const videoId =
+        parsed.searchParams.get("v") ||
+        getVideoIdFromPath(parsed.pathname) ||
+        (parsed.hostname.includes("youtu.be") ? parsed.pathname.split("/").filter(Boolean)[0] : "");
+
+      if (videoId && /^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    } catch {
+      // fallback: handle plain URL text without protocol or with query-string wrappers
+    }
+
+    const generalPatterns = [
+      /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([A-Za-z0-9_-]{11})/i,
+      /(?:https?:\/\/)?youtu\.be\/([A-Za-z0-9_-]{11})/i,
+      /(?:^|[?&])(?:v|video|url|youtube)=https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)?([A-Za-z0-9_-]{11})/i,
+      /(?:^|[?&])(?:v|video|url|youtube)=([A-Za-z0-9_-]{11})/i,
+    ];
+
+    for (const pattern of generalPatterns) {
+      const match = trimmed.match(pattern);
+      if (match) {
+        const extractedId = match[1];
+        if (/^[A-Za-z0-9_-]{11}$/.test(extractedId)) {
+          return `https://www.youtube.com/watch?v=${extractedId}`;
+        }
+      }
+    }
+
+    return trimmed;
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paramValue = params.get("url") || params.get("video") || params.get("youtube");
+
+    if (paramValue) {
+      const cleaned = normalizeYouTubeUrl(paramValue);
+      if (cleaned) {
+        setUrl(cleaned);
+      }
+    }
+  }, []);
+
   // Scroll to newest message
   useEffect(() => {
     if (chatEndRef.current) {
@@ -45,15 +116,18 @@ function Home({ token }) {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!url || !question || loading) return;
-    
+    const cleanedUrl = normalizeYouTubeUrl(url);
+    if (!cleanedUrl || !question || loading) return;
+
     const userMsg = { role: "user", content: question };
     const currentQuestion = question;
-    
+
+    setUrl(cleanedUrl);
+
     // Optimistic UI update
     setChatHistory(prev => ({
       ...prev,
-      [url]: { ...activeChat, messages: [...activeChat.messages, userMsg] }
+      [cleanedUrl]: { ...chatHistory[cleanedUrl], messages: [...(chatHistory[cleanedUrl]?.messages || []), userMsg] }
     }));
     
     setLoading(true);
@@ -61,11 +135,11 @@ function Home({ token }) {
     
     try {
       const transcriptResponse = await axios.get(`${API_URL}/transcript`, {
-        params: { url },
+        params: { url: cleanedUrl },
         headers: { Authorization: `Bearer ${token}` },
       });
       const resp = await axios.post(`${API_URL}/chat`, {
-        url,
+        url: cleanedUrl,
         video_title: transcriptResponse.data.title,
         question: currentQuestion,
         transcript_text: transcriptResponse.data.transcript_text,
@@ -74,14 +148,14 @@ function Home({ token }) {
       
       setChatHistory(prev => ({
         ...prev,
-        [url]: { title: resp.data.title || prev[url]?.title || url, messages: [...(prev[url]?.messages || []), aiMsg] }
+        [cleanedUrl]: { title: resp.data.title || prev[cleanedUrl]?.title || cleanedUrl, messages: [...(prev[cleanedUrl]?.messages || []), aiMsg] }
       }));
     } catch (err) {
       const serverMessage = err?.response?.data?.detail;
       const errMsg = { role: "assistant", content: "Error: " + (serverMessage ?? err?.message ?? "unknown error") };
       setChatHistory(prev => ({
         ...prev,
-        [url]: { ...prev[url], messages: [...(prev[url]?.messages || []), errMsg] }
+        [cleanedUrl]: { ...prev[cleanedUrl], messages: [...(prev[cleanedUrl]?.messages || []), errMsg] }
       }));
     } finally {
       setLoading(false);

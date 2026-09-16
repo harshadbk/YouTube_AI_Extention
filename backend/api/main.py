@@ -107,6 +107,14 @@ class VerifyEmailRequest(BaseModel):
 class ResendVerificationRequest(BaseModel):
     email: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    password: str
+
 class ProfileUpdateRequest(BaseModel):
     full_name: str
     phone: str
@@ -117,7 +125,7 @@ class QueryRequest(BaseModel):
     transcript_text: str | None = None
     video_title: str | None = None
 
-def send_verification_email(email: str, code: str):
+def send_verification_email(email: str, code: str, subject: str = "Your YouTube AI Assistant verification code", message_label: str = "verification"):
     if not SENDGRID_API_KEY:
         raise RuntimeError("SENDGRID_API_KEY must be configured")
 
@@ -128,17 +136,17 @@ def send_verification_email(email: str, code: str):
             "personalizations": [{"to": [{"email": email}]}],
             "from": {"email": SENDGRID_FROM_EMAIL, "name": "YouTube AI Assistant"},
             "reply_to": {"email": SENDGRID_FROM_EMAIL, "name": "YouTube AI Assistant"},
-            "subject": "Your YouTube AI Assistant verification code",
+            "subject": subject,
             "content": [{
                 "type": "text/plain",
                 "value": (
-                    f"Your YouTube AI Assistant verification code is {code}.\n\n"
+                    f"Your YouTube AI Assistant {message_label} code is {code}.\n\n"
                     f"This code expires in {VERIFICATION_CODE_TTL_MINUTES} minutes."
                 ),
             }, {
                 "type": "text/html",
                 "value": (
-                    f"<p>Your YouTube AI Assistant verification code is:</p>"
+                    f"<p>Your YouTube AI Assistant {message_label} code is:</p>"
                     f"<p style='font-size:28px;font-weight:bold;letter-spacing:6px'>{code}</p>"
                     f"<p>This code expires in {VERIFICATION_CODE_TTL_MINUTES} minutes.</p>"
                 ),
@@ -340,6 +348,50 @@ async def resend_verification(req: ResendVerificationRequest):
         logger.exception("Verification email resend failed for %s", email)
         raise HTTPException(status_code=502, detail=str(error)) from error
     return {"verification_required": True, "email": email}
+
+@app.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    email = req.email.strip().lower()
+    user = users.find_one({"email": email})
+    if user:
+        reset_code = f"{secrets.randbelow(1000000):06d}"
+        users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "password_reset_code_hash": bcrypt.hashpw(reset_code.encode(), bcrypt.gensalt()).decode(),
+                "password_reset_expires_at": datetime.now(timezone.utc).timestamp() + VERIFICATION_CODE_TTL_MINUTES * 60,
+            }},
+        )
+        try:
+            send_verification_email(
+                email,
+                reset_code,
+                subject="Reset your YouTube AI Assistant password",
+                message_label="password reset",
+            )
+        except Exception as error:
+            logger.exception("Password reset email failed for %s", email)
+            raise HTTPException(status_code=502, detail=str(error)) from error
+    return {"reset_required": True, "email": email}
+
+@app.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    email = req.email.strip().lower()
+    if len(req.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    user = users.find_one({"email": email})
+    if not user or not user.get("password_reset_code_hash"):
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset code")
+    if user.get("password_reset_expires_at", 0) < datetime.now(timezone.utc).timestamp():
+        raise HTTPException(status_code=400, detail="Password reset code has expired")
+    if not bcrypt.checkpw(req.code.encode(), user["password_reset_code_hash"].encode()):
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset code")
+
+    users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()}, "$unset": {"password_reset_code_hash": "", "password_reset_expires_at": ""}},
+    )
+    return {"reset": True}
 
 @app.post("/auth/login")
 async def login(req: AuthRequest):
