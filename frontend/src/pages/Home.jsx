@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Send, Video, Bot, User, MessageSquare, Menu, X, Plus } from "lucide-react";
 import { API_URL } from "../config";
 
@@ -11,6 +12,7 @@ function Home({ token }) {
   // History state: { [url]: { title, messages } }
   const [chatHistory, setChatHistory] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(true);
   const chatEndRef = useRef(null);
 
@@ -172,7 +174,7 @@ function Home({ token }) {
               </div>
               <div className="message-content">
                 {msg.role === "assistant" ? (
-                  <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{msg.content}</ReactMarkdown>
                 ) : (
                   msg.content
                 )}
