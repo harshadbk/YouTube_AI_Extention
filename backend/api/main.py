@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import logging
 import secrets
@@ -440,18 +441,37 @@ async def get_history(user=Depends(current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def normalize_video_url(value: str | None) -> str:
+    if not value:
+        return ""
+    text = value.strip()
+    if not text:
+        return ""
+
+    match = re.search(r"(?:v=|youtu\.be/|/shorts/|/embed/)([A-Za-z0-9_-]{11})", text)
+    if match:
+        return f"https://www.youtube.com/watch?v={match.group(1)}"
+    return text.rstrip("/")
+
 @app.delete("/history/{url}")
 async def delete_history(url: str, user=Depends(current_user)):
     try:
-        decoded_url = url
-        try:
-            from urllib.parse import unquote
-            decoded_url = unquote(url)
-        except Exception:
-            pass
+        from urllib.parse import unquote
+        decoded_url = unquote(url)
+        normalized_target = normalize_video_url(decoded_url)
 
-        messages.delete_many({"user": user["_id"], "url": decoded_url})
-        return {"deleted": True, "url": decoded_url}
+        delete_filter = {
+            "user": user["_id"],
+            "$or": [
+                {"url": decoded_url},
+                {"url": decoded_url.rstrip("/")},
+                {"url": normalized_target},
+                {"url": normalized_target.rstrip("/")},
+            ],
+        }
+
+        result = messages.delete_many(delete_filter)
+        return {"deleted": True, "url": decoded_url, "deleted_count": result.deleted_count}
     except Exception as error:
         logger.exception("Delete history failed for user %s and url %s", user.get("_id"), url)
         raise HTTPException(status_code=500, detail=str(error)) from error
