@@ -1,7 +1,7 @@
 import React from "react";
 import { useState } from "react";
 import { Routes, Route, NavLink, Link, Navigate } from "react-router-dom";
-import { Video, Globe, Share2, LogOut, UserCircle } from "lucide-react";
+import { Video, Globe, Share2, LogOut, UserCircle, Menu, X } from "lucide-react";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Features from "./pages/Features";
@@ -11,6 +11,7 @@ import Profile from "./pages/Profile";
 import "./App.css";
 
 function App() {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [session, setSession] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("youtube-ai-session")) || null;
@@ -21,6 +22,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem("youtube-ai-session");
+    setMobileNavOpen(false);
     setSession(null);
   };
 
@@ -58,11 +60,19 @@ function App() {
           <Video className="header-icon" size={28} />
           <h1>YouTube AI Assistant</h1>
         </Link>
-        <div className="nav-links">
-          <NavLink to="/" className={({ isActive }) => (isActive ? "active-link" : "")}>Home</NavLink>
-          <NavLink to="/features" className={({ isActive }) => (isActive ? "active-link" : "")}>Features</NavLink>
-          <NavLink to="/about" className={({ isActive }) => (isActive ? "active-link" : "")}>About</NavLink>
-          <NavLink to="/profile" className={({ isActive }) => (isActive ? "active-link" : "")}><UserCircle size={16} /> Profile</NavLink>
+        <button
+          className="mobile-nav-toggle"
+          onClick={() => setMobileNavOpen((open) => !open)}
+          aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={mobileNavOpen}
+        >
+          {mobileNavOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+        <div className={`nav-links ${mobileNavOpen ? "mobile-nav-open" : ""}`}>
+          <NavLink to="/" onClick={() => setMobileNavOpen(false)} className={({ isActive }) => (isActive ? "active-link" : "")}>Home</NavLink>
+          <NavLink to="/features" onClick={() => setMobileNavOpen(false)} className={({ isActive }) => (isActive ? "active-link" : "")}>Features</NavLink>
+          <NavLink to="/about" onClick={() => setMobileNavOpen(false)} className={({ isActive }) => (isActive ? "active-link" : "")}>About</NavLink>
+          <NavLink to="/profile" onClick={() => setMobileNavOpen(false)} className={({ isActive }) => (isActive ? "active-link" : "")}><UserCircle size={16} /> Profile</NavLink>
           <button className="logout-btn" onClick={handleLogout} title={`Log out ${session.email}`}><LogOut size={16} /> Log out</button>
         </div>
       </nav>

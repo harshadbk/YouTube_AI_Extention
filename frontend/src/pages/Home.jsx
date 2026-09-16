@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Video, Bot, User, MessageSquare, Menu, X, Plus, Trash2, Share2 } from "lucide-react";
+import { Send, Video, User, MessageSquare, Menu, X, Plus, Trash2, Share2 } from "lucide-react";
 import { API_URL } from "../config";
 
 function Home({ token }) {
@@ -258,6 +258,7 @@ function Home({ token }) {
   
   const loadChat = (targetUrl) => {
     setUrl(targetUrl);
+    setSidebarOpen(false);
   };
 
   const markdownComponents = {
@@ -347,7 +348,6 @@ function Home({ token }) {
         <div className="chat-box">
           {messages.length === 0 && (
             <div className="empty-state">
-              <Bot size={64} opacity={0.5} color="var(--accent-color)" />
               <h3>How can I help you today?</h3>
               <p>Enter a YouTube URL below and ask me to summarize, explain, or answer questions about it.</p>
             </div>
@@ -355,9 +355,7 @@ function Home({ token }) {
           
           {messages.map((msg, i) => (
             <div key={i} className={`message ${msg.role}`}>
-              <div className="message-avatar">
-                {msg.role === "user" ? <User size={18} /> : <Bot size={18} />}
-              </div>
+              {msg.role === "user" && <div className="message-avatar"><User size={18} /></div>}
               <div className="message-content">
                 {msg.role === "assistant" ? (
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{msg.content}</ReactMarkdown>
@@ -370,9 +368,6 @@ function Home({ token }) {
           
           {loading && (
             <div className="message assistant">
-              <div className="message-avatar">
-                <Bot size={18} />
-              </div>
               <div className="typing-indicator">
                 <div className="typing-dot"></div>
                 <div className="typing-dot"></div>

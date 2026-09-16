@@ -375,6 +375,10 @@
   display: none;
 }
 
+.mobile-nav-toggle {
+  display: none;
+}
+
 @media (min-width: 769px) {
   .app-wrapper.sidebar-closed {
     grid-template-columns: 0 minmax(0, 1fr);
@@ -1134,9 +1138,9 @@
   }
 
   .navbar {
-    padding: 14px 20px;
-    flex-wrap: wrap;
-    gap: 12px;
+    padding: 10px 14px;
+    min-height: 52px;
+    gap: 8px;
   }
 
   .nav-brand h1 {
@@ -1144,22 +1148,41 @@
   }
 
   .nav-links {
-    width: 100%;
+    display: none;
+  }
+
+  .mobile-nav-toggle {
+    display: flex;
+    align-items: center;
     justify-content: center;
-    gap: 18px;
-    flex-wrap: wrap;
+    margin-left: auto;
+    padding: 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+  }
+
+  .nav-links.mobile-nav-open {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 8px 0 2px;
+    border-top: 1px solid var(--border-color);
   }
 
   .main-content {
-    padding: 16px 12px;
+    padding: 8px 6px;
   }
 
   .app-wrapper {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 130px);
+    height: calc(100dvh - 74px);
     min-height: 520px;
-    border-radius: 10px;
+    border-radius: 8px;
   }
 
   .sidebar {
@@ -1178,8 +1201,8 @@
   }
 
   .chat-box {
-    padding: 18px 14px;
-    gap: 14px;
+    padding: 14px 8px;
+    gap: 12px;
   }
 
   .message {
@@ -1194,8 +1217,8 @@
   }
 
   .input-area {
-    padding: 14px;
-    gap: 10px;
+    padding: 10px 8px;
+    gap: 8px;
   }
 
   .input-area > .input-group,
@@ -1217,12 +1240,12 @@
 
 @media (max-width: 480px) {
   .navbar {
-    padding: 12px 14px;
+    padding: 8px 10px;
   }
 
   .nav-brand {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    justify-content: flex-start;
   }
 
   .nav-links {
@@ -1254,12 +1277,12 @@
   }
 
   .app-wrapper {
-    height: calc(100dvh - 120px);
+    height: calc(100dvh - 62px);
     min-height: 460px;
   }
 
   .app-header {
-    padding: 12px 14px;
+    padding: 8px 8px;
     gap: 8px;
   }
 
@@ -1268,7 +1291,7 @@
   }
 
   .chat-box {
-    padding: 14px 10px;
+    padding: 12px 6px;
   }
 
   .message {
@@ -1282,7 +1305,7 @@
   }
 
   .input-area {
-    padding: 10px;
+    padding: 8px 6px;
   }
 
   .input-area > div:last-child {
