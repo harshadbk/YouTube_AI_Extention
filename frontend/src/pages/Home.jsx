@@ -170,24 +170,22 @@ function Home({ token }) {
     const normalizedDeleteTarget = normalizeYouTubeUrl(chatUrl) || chatUrl;
     const deleteUrl = encodeURIComponent(normalizedDeleteTarget);
 
+    const nextHistory = { ...chatHistory };
+    Object.keys(nextHistory).forEach((key) => {
+      if (normalizeYouTubeUrl(key) === normalizedDeleteTarget || key === chatUrl) {
+        delete nextHistory[key];
+      }
+    });
+
+    setChatHistory(nextHistory);
+    if (normalizeYouTubeUrl(url) === normalizedDeleteTarget || url === chatUrl) {
+      setUrl("");
+    }
+
     try {
       await axios.delete(`${API_URL}/history/${deleteUrl}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      setChatHistory((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((key) => {
-          if (normalizeYouTubeUrl(key) === normalizedDeleteTarget || key === chatUrl) {
-            delete next[key];
-          }
-        });
-        return next;
-      });
-
-      if (normalizeYouTubeUrl(url) === normalizedDeleteTarget || url === chatUrl) {
-        setUrl("");
-      }
     } catch (error) {
       console.error("Failed to delete chat", error);
     } finally {
