@@ -126,29 +126,26 @@ function Home({ token }) {
     if (!safeUrl) return;
 
     const shareUrl = `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(safeUrl)}`;
-    const chatText = messages.length
-      ? messages
-          .map((msg) => `${msg.role === "user" ? "You" : "Assistant"}: ${msg.content}`)
-          .join("\n\n")
-      : "No messages yet.";
-    const sharePayload = `${chatText}\n\nVideo: ${safeUrl}\nChat link: ${shareUrl}`;
 
     try {
       if (navigator.share) {
         await navigator.share({
           title: "YouTube AI Assistant chat",
-          text: sharePayload,
+          text: "Open this YouTube AI Assistant chat",
           url: shareUrl,
         });
+        setShareState("Shared");
       } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(sharePayload);
+        await navigator.clipboard.writeText(shareUrl);
+        setShareState("Copied");
+      } else {
+        setShareState("Share");
       }
-      setShareState("Copied");
       window.setTimeout(() => setShareState("Share"), 1200);
     } catch (error) {
-      if (navigator.clipboard) {
+      if (error?.name !== "AbortError" && navigator.clipboard) {
         try {
-          await navigator.clipboard.writeText(sharePayload);
+          await navigator.clipboard.writeText(shareUrl);
           setShareState("Copied");
           window.setTimeout(() => setShareState("Share"), 1200);
         } catch {

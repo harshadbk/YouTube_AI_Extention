@@ -5,6 +5,16 @@
   min-height: 100vh;
 }
 
+.website-container.chat-layout {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-layout .main-content {
+  overflow: hidden;
+}
+
 /* Navbar */
 .navbar {
   display: flex;

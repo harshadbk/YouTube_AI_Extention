@@ -1,6 +1,6 @@
 import React from "react";
 import { useState } from "react";
-import { Routes, Route, NavLink, Link, Navigate } from "react-router-dom";
+import { Routes, Route, NavLink, Link, Navigate, useLocation } from "react-router-dom";
 import { Video, Globe, Share2, LogOut, UserCircle, Menu, X } from "lucide-react";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
@@ -12,6 +12,7 @@ import "./App.css";
 
 function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const location = useLocation();
   const [session, setSession] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("youtube-ai-session")) || null;
@@ -52,8 +53,10 @@ function App() {
     );
   }
 
+  const isChatPage = location.pathname === "/";
+
   return (
-    <div className="website-container">
+    <div className={`website-container ${isChatPage ? "chat-layout" : ""}`}>
       {/* Navbar */}
       <nav className="navbar">
         <Link to="/" className="nav-brand" style={{ textDecoration: 'none' }}>
@@ -93,16 +96,17 @@ function App() {
         </Routes>
       </main>
 
-      {/* Footer */}
-      <footer className="footer">
-        <div>&copy; 2026 YouTube AI Assistant. Developed by <strong>Vivek Kumbhar</strong>.</div>
-        <div className="footer-links">
-          <a>Privacy Policy</a>
-          <a>Terms of Service</a>
-          <a><Globe size={18} /></a>
-          <a><Share2 size={18} /></a>
-        </div>
-      </footer>
+      {!isChatPage && (
+        <footer className="footer">
+          <div>&copy; 2026 YouTube AI Assistant. Developed by <strong>Vivek Kumbhar</strong>.</div>
+          <div className="footer-links">
+            <a>Privacy Policy</a>
+            <a>Terms of Service</a>
+            <a><Globe size={18} /></a>
+            <a><Share2 size={18} /></a>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }
