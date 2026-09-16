@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Video, Bot, User, MessageSquare, Menu, X, Plus } from "lucide-react";
+import { Send, Video, Bot, User, MessageSquare, Menu, X, Plus, Trash2, Share2 } from "lucide-react";
 import { API_URL } from "../config";
 
 function Home({ token }) {
@@ -13,6 +13,8 @@ function Home({ token }) {
   const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(true);
   const [shareState, setShareState] = useState("Share");
+  const [deleteConfirmUrl, setDeleteConfirmUrl] = useState(null);
+  const [deleteConfirmTitle, setDeleteConfirmTitle] = useState("");
   const chatEndRef = useRef(null);
 
   const normalizeYouTubeUrl = (input) => {
@@ -124,23 +126,29 @@ function Home({ token }) {
     if (!safeUrl) return;
 
     const shareUrl = `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(safeUrl)}`;
+    const chatText = messages.length
+      ? messages
+          .map((msg) => `${msg.role === "user" ? "You" : "Assistant"}: ${msg.content}`)
+          .join("\n\n")
+      : "No messages yet.";
+    const sharePayload = `${chatText}\n\nVideo: ${safeUrl}\nChat link: ${shareUrl}`;
 
     try {
       if (navigator.share) {
         await navigator.share({
-          title: "YouTube AI Assistant",
-          text: "Continue this YouTube chat",
+          title: "YouTube AI Assistant chat",
+          text: sharePayload,
           url: shareUrl,
         });
       } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl);
+        await navigator.clipboard.writeText(sharePayload);
       }
       setShareState("Copied");
       window.setTimeout(() => setShareState("Share"), 1200);
     } catch (error) {
       if (navigator.clipboard) {
         try {
-          await navigator.clipboard.writeText(shareUrl);
+          await navigator.clipboard.writeText(sharePayload);
           setShareState("Copied");
           window.setTimeout(() => setShareState("Share"), 1200);
         } catch {
@@ -150,10 +158,18 @@ function Home({ token }) {
     }
   };
 
-  const handleDeleteChat = async (chatUrl) => {
+  const handleDeleteChatRequest = (chatUrl, title) => {
+    setDeleteConfirmUrl(chatUrl);
+    setDeleteConfirmTitle(title || chatUrl);
+  };
+
+  const confirmDeleteChat = async () => {
+    const chatUrl = deleteConfirmUrl;
     if (!chatUrl) return;
 
-    const deleteUrl = encodeURIComponent(chatUrl);
+    const normalizedDeleteTarget = normalizeYouTubeUrl(chatUrl) || chatUrl;
+    const deleteUrl = encodeURIComponent(normalizedDeleteTarget);
+
     try {
       await axios.delete(`${API_URL}/history/${deleteUrl}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -161,15 +177,22 @@ function Home({ token }) {
 
       setChatHistory((prev) => {
         const next = { ...prev };
-        delete next[chatUrl];
+        Object.keys(next).forEach((key) => {
+          if (normalizeYouTubeUrl(key) === normalizedDeleteTarget || key === chatUrl) {
+            delete next[key];
+          }
+        });
         return next;
       });
 
-      if (url === chatUrl) {
+      if (normalizeYouTubeUrl(url) === normalizedDeleteTarget || url === chatUrl) {
         setUrl("");
       }
     } catch (error) {
       console.error("Failed to delete chat", error);
+    } finally {
+      setDeleteConfirmUrl(null);
+      setDeleteConfirmTitle("");
     }
   };
 
@@ -286,12 +309,12 @@ function Home({ token }) {
                 className="delete-history-btn"
                 onClick={(event) => {
                   event.stopPropagation();
-                  handleDeleteChat(chatUrl);
+                  handleDeleteChatRequest(chatUrl, chatHistory[chatUrl].title);
                 }}
                 aria-label={`Delete chat for ${chatHistory[chatUrl].title}`}
                 title="Delete chat"
               >
-                ×
+                <Trash2 size={14} />
               </button>
             </div>
           ))}
@@ -305,10 +328,25 @@ function Home({ token }) {
         <Video className="header-icon" size={24} />
         <h2>{url ? "Active Chat" : "New Chat"}</h2>
         <button className="share-btn" onClick={handleShare} disabled={!normalizeYouTubeUrl(url)}>
-          {shareState}
+          <Share2 size={15} />
+          <span>{shareState}</span>
         </button>
       </header>
       
+      {deleteConfirmUrl && (
+        <div className="delete-confirm-overlay" onClick={() => setDeleteConfirmUrl(null)}>
+          <div className="delete-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="delete-confirm-icon"><Trash2 size={22} /></div>
+            <h3>Delete this chat?</h3>
+            <p>{deleteConfirmTitle}</p>
+            <div className="delete-confirm-actions">
+              <button className="secondary-action-btn" onClick={() => setDeleteConfirmUrl(null)}>Cancel</button>
+              <button className="danger-action-btn" onClick={confirmDeleteChat}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="chat-container">
         <div className="chat-box">
           {messages.length === 0 && (
