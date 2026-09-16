@@ -17,7 +17,10 @@ This is a production-ready FastAPI backend for an AI-powered YouTube Chat applic
 
 3. Configure Environment Variables:
    - Copy `.env.example` to `.env`
-   - Fill in `OPENAI_API_KEY`, `GROQ_API_KEY`, and your MongoDB Atlas `MONGODB_URI`.
+   - Fill in `OPENAI_API_KEY`, `GROQ_API_KEY`, `JWT_SECRET`, and your MongoDB Atlas `MONGODB_URI`.
+   - Set `SENDGRID_API_KEY` to a server-side SendGrid API key and `SENDGRID_FROM_EMAIL` to a verified sender address. The default sender is `khataleharshad78@gmail.com`.
+   - For Google sign-in, create a Web OAuth client in Google Cloud Console and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `FRONTEND_URL`.
+   - Add the exact value of `GOOGLE_REDIRECT_URI` to the OAuth client's authorized redirect URIs.
 
 Chat history is stored in the configured MongoDB database (`youtube_ai_extension` by
 default). The connection string is read from `MONGODB_URI`; it is never stored in
@@ -32,10 +35,13 @@ To use a RapidAPI transcript provider instead, configure `RAPIDAPI_KEY`,
 accept the video ID using the parameter named by `RAPIDAPI_VIDEO_PARAMETER`
 (default: `videoId`). RapidAPI is used automatically when `RAPIDAPI_KEY` is set.
 
-Authentication creates a `users` collection with hashed passwords. Use
-`POST /auth/register` or `POST /auth/login` to receive a bearer token. Send that
-token with `GET /history` and `POST /chat`; messages are stored with the user's ID
-in the `user` field and are isolated per account.
+Authentication creates a `users` collection with hashed passwords. Registration
+sends a six-digit verification code through SendGrid; call `POST /auth/verify-email`
+with the email and code to receive a bearer token. Verified users can then use
+`POST /auth/login`. Send the token with `GET /history` and `POST /chat`; messages
+are stored with the user's ID in the `user` field and are isolated per account.
+Google sign-in is available at `GET /auth/google/login` and uses the same bearer
+token session after Google confirms the account email.
 
 4. Run the server:
    ```bash

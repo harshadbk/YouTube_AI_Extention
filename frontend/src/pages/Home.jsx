@@ -8,10 +8,9 @@ function Home({ token }) {
   const [url, setUrl] = useState("");
   const [question, setQuestion] = useState("");
   
-  // History state: { [url]: [{role, content}] }
+  // History state: { [url]: { title, messages } }
   const [chatHistory, setChatHistory] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(true);
   const chatEndRef = useRef(null);
 
@@ -20,7 +19,10 @@ function Home({ token }) {
     const fetchHistory = async () => {
       try {
         const resp = await axios.get(`${API_URL}/history`, { headers: { Authorization: `Bearer ${token}` } });
-        setChatHistory(resp.data);
+        const history = Array.isArray(resp.data)
+          ? Object.fromEntries(resp.data.map((chat) => [chat.url, { title: chat.title, messages: chat.messages }]))
+          : Object.fromEntries(Object.entries(resp.data).map(([chatUrl, messages]) => [chatUrl, { title: chatUrl, messages }]));
+        setChatHistory(history);
       } catch (err) {
         console.error("Failed to load history from database", err);
       } finally {
@@ -30,15 +32,15 @@ function Home({ token }) {
     fetchHistory();
   }, [token]);
 
-  // Active messages based on current URL
-  const messages = chatHistory[url] || [];
+  const activeChat = chatHistory[url] || { title: "", messages: [] };
+  const messages = activeChat.messages;
 
   // Scroll to newest message
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, loading]);
+  }, [messages]);
 
   const handleSend = async () => {
     if (!url || !question || loading) return;
@@ -49,7 +51,7 @@ function Home({ token }) {
     // Optimistic UI update
     setChatHistory(prev => ({
       ...prev,
-      [url]: [...(prev[url] || []), userMsg]
+      [url]: { ...activeChat, messages: [...activeChat.messages, userMsg] }
     }));
     
     setLoading(true);
@@ -62,6 +64,7 @@ function Home({ token }) {
       });
       const resp = await axios.post(`${API_URL}/chat`, {
         url,
+        video_title: transcriptResponse.data.title,
         question: currentQuestion,
         transcript_text: transcriptResponse.data.transcript_text,
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -69,14 +72,14 @@ function Home({ token }) {
       
       setChatHistory(prev => ({
         ...prev,
-        [url]: [...(prev[url] || []), aiMsg]
+        [url]: { title: resp.data.title || prev[url]?.title || url, messages: [...(prev[url]?.messages || []), aiMsg] }
       }));
     } catch (err) {
       const serverMessage = err?.response?.data?.detail;
       const errMsg = { role: "assistant", content: "Error: " + (serverMessage ?? err?.message ?? "unknown error") };
       setChatHistory(prev => ({
         ...prev,
-        [url]: [...(prev[url] || []), errMsg]
+        [url]: { ...prev[url], messages: [...(prev[url]?.messages || []), errMsg] }
       }));
     } finally {
       setLoading(false);
@@ -97,6 +100,14 @@ function Home({ token }) {
   const loadChat = (targetUrl) => {
     setUrl(targetUrl);
     setSidebarOpen(false);
+  };
+
+  const markdownComponents = {
+    table: ({ children }) => <div className="markdown-table-wrap"><table>{children}</table></div>,
+    pre: ({ children }) => <pre className="markdown-code-block">{children}</pre>,
+    code: ({ className, children, ...props }) => (
+      <code className={className || "markdown-inline-code"} {...props}>{children}</code>
+    ),
   };
 
   return (
@@ -123,14 +134,14 @@ function Home({ token }) {
             <div className="empty-history">No past chats yet.</div>
           )}
           {Object.keys(chatHistory).reverse().map((chatUrl) => (
-            <div 
-              key={chatUrl} 
+            <div
+              key={chatUrl}
               className={`history-item ${url === chatUrl ? 'active' : ''}`}
               onClick={() => loadChat(chatUrl)}
-              title={chatUrl}
+              title={chatHistory[chatUrl].title}
             >
               <Video size={16} className="history-icon" />
-              <div className="history-url">{chatUrl}</div>
+              <div className="history-url">{chatHistory[chatUrl].title}</div>
             </div>
           ))}
         </div>
@@ -161,7 +172,7 @@ function Home({ token }) {
               </div>
               <div className="message-content">
                 {msg.role === "assistant" ? (
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
                 ) : (
                   msg.content
                 )}

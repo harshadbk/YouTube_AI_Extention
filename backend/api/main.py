@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -14,6 +15,7 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 
 import traceback
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,13 @@ MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "youtube_ai_extension")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "messages")
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "khataleharshad78@gmail.com")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+VERIFICATION_CODE_TTL_MINUTES = 15
 mongo_client = None
 messages = None
 users = None
@@ -91,8 +100,51 @@ class AuthRequest(BaseModel):
     full_name: str | None = None
     phone: str | None = None
 
+class VerifyEmailRequest(BaseModel):
+    email: str
+    code: str
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: str
+    phone: str
+
+class QueryRequest(BaseModel):
+    url: str
+    question: str
+    transcript_text: str | None = None
+    video_title: str | None = None
+
+def send_verification_email(email: str, code: str):
+    if not SENDGRID_API_KEY:
+        raise RuntimeError("SENDGRID_API_KEY must be configured")
+
+    response = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "personalizations": [{"to": [{"email": email}]}],
+            "from": {"email": SENDGRID_FROM_EMAIL},
+            "subject": "Your YouTube AI Assistant verification code",
+            "content": [{
+                "type": "text/plain",
+                "value": f"Your verification code is {code}. It expires in {VERIFICATION_CODE_TTL_MINUTES} minutes.",
+            }],
+        },
+        timeout=10,
+    )
+    if response.status_code >= 300:
+        logger.error("SendGrid rejected verification email: %s", response.text)
+        raise RuntimeError("Unable to send verification email")
+
 def create_token(user_id: str):
     return jwt.encode({"sub": user_id}, JWT_SECRET, algorithm="HS256")
+
+def create_google_state():
+    expires_at = datetime.now(timezone.utc).timestamp() + 600
+    return jwt.encode({"purpose": "google_oauth", "exp": expires_at}, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 def current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
@@ -117,12 +169,16 @@ async def register(req: AuthRequest):
         raise HTTPException(status_code=400, detail="Name, phone, valid email, and a password with at least 8 characters are required")
 
     user_id = str(uuid4())
+    verification_code = f"{secrets.randbelow(1000000):06d}"
     user = {
         "_id": user_id,
         "email": email,
         "full_name": full_name,
         "phone": phone,
         "password_hash": bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode(),
+        "email_verified": False,
+        "verification_code_hash": bcrypt.hashpw(verification_code.encode(), bcrypt.gensalt()).decode(),
+        "verification_expires_at": datetime.now(timezone.utc).timestamp() + VERIFICATION_CODE_TTL_MINUTES * 60,
         "created_at": datetime.now(timezone.utc),
     }
     try:
@@ -131,7 +187,137 @@ async def register(req: AuthRequest):
         if getattr(error, "code", None) == 11000:
             raise HTTPException(status_code=409, detail="An account with this email already exists")
         raise
-    return {"token": create_token(user_id), "email": email, "full_name": full_name, "phone": phone}
+    try:
+        send_verification_email(email, verification_code)
+    except Exception as error:
+        users.delete_one({"_id": user_id})
+        logger.exception("Verification email failed for %s", email)
+        raise HTTPException(status_code=502, detail="Unable to send verification email") from error
+    return {"verification_required": True, "email": email}
+
+@app.get("/auth/google/login")
+async def google_login():
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+    from fastapi.responses import RedirectResponse
+    from urllib.parse import urlencode
+
+    params = urlencode({
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+        "state": create_google_state(),
+    })
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+@app.get("/auth/google/callback")
+async def google_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    from fastapi.responses import RedirectResponse
+    from urllib.parse import urlencode
+
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/login?google_error=cancelled")
+    if not code or not state:
+        return RedirectResponse(f"{FRONTEND_URL}/login?google_error=missing_response")
+    try:
+        state_payload = jwt.decode(state, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if state_payload.get("purpose") != "google_oauth":
+            raise JWTError
+        token_response = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+        token_response.raise_for_status()
+        access_token = token_response.json()["access_token"]
+        profile_response = requests.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        profile_response.raise_for_status()
+        profile = profile_response.json()
+        email = profile.get("email", "").strip().lower()
+        if not email or not profile.get("email_verified"):
+            raise ValueError("Google email is not verified")
+
+        user = users.find_one({"email": email})
+        if user:
+            user_id = user["_id"]
+            users.update_one({"_id": user_id}, {"$set": {"email_verified": True}})
+        else:
+            user_id = str(uuid4())
+            users.insert_one({
+                "_id": user_id,
+                "email": email,
+                "full_name": profile.get("name", "").strip(),
+                "phone": "",
+                "password_hash": bcrypt.hashpw(secrets.token_urlsafe(32).encode(), bcrypt.gensalt()).decode(),
+                "email_verified": True,
+                "created_at": datetime.now(timezone.utc),
+            })
+        fragment = urlencode({"token": create_token(user_id), "email": email})
+        return RedirectResponse(f"{FRONTEND_URL}/auth/google/callback#{fragment}")
+    except Exception:
+        logger.exception("Google sign-in failed")
+        return RedirectResponse(f"{FRONTEND_URL}/login?google_error=failed")
+
+@app.post("/auth/verify-email")
+async def verify_email(req: VerifyEmailRequest):
+    email = req.email.strip().lower()
+    user = users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid email or verification code")
+    if user.get("email_verified", True):
+        raise HTTPException(status_code=400, detail="Email is already verified")
+    if user.get("verification_expires_at", 0) < datetime.now(timezone.utc).timestamp():
+        raise HTTPException(status_code=400, detail="Verification code has expired")
+    if not bcrypt.checkpw(req.code.encode(), user["verification_code_hash"].encode()):
+        raise HTTPException(status_code=400, detail="Invalid email or verification code")
+
+    users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"email_verified": True}, "$unset": {"verification_code_hash": "", "verification_expires_at": ""}},
+    )
+    return {
+        "token": create_token(user["_id"]),
+        "email": user["email"],
+        "full_name": user.get("full_name", ""),
+        "phone": user.get("phone", ""),
+    }
+
+@app.post("/auth/resend-verification")
+async def resend_verification(req: ResendVerificationRequest):
+    email = req.email.strip().lower()
+    user = users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="No account was found for this email")
+    if user.get("email_verified", True):
+        raise HTTPException(status_code=400, detail="Email is already verified")
+
+    verification_code = f"{secrets.randbelow(1000000):06d}"
+    users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "verification_code_hash": bcrypt.hashpw(verification_code.encode(), bcrypt.gensalt()).decode(),
+            "verification_expires_at": datetime.now(timezone.utc).timestamp() + VERIFICATION_CODE_TTL_MINUTES * 60,
+        }},
+    )
+    try:
+        send_verification_email(email, verification_code)
+    except Exception as error:
+        logger.exception("Verification email resend failed for %s", email)
+        raise HTTPException(status_code=502, detail="Unable to send verification email") from error
+    return {"verification_required": True, "email": email}
 
 @app.post("/auth/login")
 async def login(req: AuthRequest):
@@ -139,6 +325,8 @@ async def login(req: AuthRequest):
     user = users.find_one({"email": email})
     if not user or not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.get("email_verified", True):
+        raise HTTPException(status_code=403, detail="Please verify your email before logging in")
     return {
         "token": create_token(user["_id"]),
         "email": user["email"],
@@ -150,29 +338,49 @@ async def login(req: AuthRequest):
 async def me(user=Depends(current_user)):
     return {"email": user["email"], "full_name": user.get("full_name", ""), "phone": user.get("phone", "")}
 
+@app.put("/auth/profile")
+async def update_profile(req: ProfileUpdateRequest, user=Depends(current_user)):
+    full_name = req.full_name.strip()
+    phone = req.phone.strip()
+    if not full_name or not phone:
+        raise HTTPException(status_code=400, detail="Name and phone number are required")
+    users.update_one({"_id": user["_id"]}, {"$set": {"full_name": full_name, "phone": phone}})
+    return {"email": user["email"], "full_name": full_name, "phone": phone}
+
 @app.get("/history")
 async def get_history(user=Depends(current_user)):
     try:
         history = {}
-        for message in messages.find({"user": user["_id"]}, {"_id": 0, "url": 1, "role": 1, "content": 1}).sort("created_at", ASCENDING):
+        for message in messages.find(
+            {"user": user["_id"]},
+            {"_id": 0, "url": 1, "title": 1, "role": 1, "content": 1},
+        ).sort("created_at", ASCENDING):
             url = message["url"]
             if url not in history:
-                history[url] = []
-            history[url].append({"role": message["role"], "content": message["content"]})
+                history[url] = {"title": message.get("title") or url, "messages": []}
+            if message.get("title") and history[url]["title"] == url:
+                history[url]["title"] = message["title"]
+            history[url]["messages"].append({"role": message["role"], "content": message["content"]})
 
-        return history
+        return [{"url": url, **conversation} for url, conversation in history.items()]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-class QueryRequest(BaseModel):
-    url: str
-    question: str
-    transcript_text: str | None = None
 
 @app.get("/transcript")
 async def transcript(url: str, user=Depends(current_user)):
     try:
-        return {"transcript_text": get_transcript(extract_video_id(url))}
+        title = url
+        try:
+            title_response = requests.get(
+                "https://www.youtube.com/oembed",
+                params={"url": url, "format": "json"},
+                timeout=5,
+            )
+            title_response.raise_for_status()
+            title = title_response.json().get("title") or url
+        except Exception:
+            logger.warning("Could not fetch YouTube title for %s", url)
+        return {"transcript_text": get_transcript(extract_video_id(url)), "title": title}
     except TranscriptUnavailableError as error:
         logger.warning("Transcript unavailable for %s: %s", url, error)
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -195,6 +403,7 @@ async def chat(req: QueryRequest, user=Depends(current_user)):
         messages.insert_one({
             "user": user["_id"],
             "url": req.url,
+            "title": req.video_title or req.url,
             "role": "user",
             "content": req.question,
             "created_at": datetime.now(timezone.utc),
@@ -214,12 +423,13 @@ async def chat(req: QueryRequest, user=Depends(current_user)):
         messages.insert_one({
             "user": user["_id"],
             "url": req.url,
+            "title": req.video_title or req.url,
             "role": "assistant",
             "content": answer,
             "created_at": datetime.now(timezone.utc),
         })
         
-        return {"answer": answer}
+        return {"answer": answer, "title": req.video_title or req.url}
     except TranscriptUnavailableError as error:
         logger.warning("Transcript unavailable for %s: %s", req.url, error)
         raise HTTPException(status_code=422, detail=str(error)) from error

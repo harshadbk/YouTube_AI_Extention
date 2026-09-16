@@ -1,11 +1,13 @@
 import React from "react";
 import { useState } from "react";
-import { Routes, Route, NavLink, Link } from "react-router-dom";
-import { Video, Globe, Share2, LogOut } from "lucide-react";
+import { Routes, Route, NavLink, Link, Navigate } from "react-router-dom";
+import { Video, Globe, Share2, LogOut, UserCircle } from "lucide-react";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Features from "./pages/Features";
 import About from "./pages/About";
+import GoogleCallback from "./pages/GoogleCallback";
+import Profile from "./pages/Profile";
 import "./App.css";
 
 function App() {
@@ -22,11 +24,29 @@ function App() {
     setSession(null);
   };
 
-  if (!session?.token) {
-    return <Auth onAuthenticated={(nextSession) => {
+  const handleAuthenticated = (nextSession) => {
+    localStorage.setItem("youtube-ai-session", JSON.stringify(nextSession));
+    setSession(nextSession);
+  };
+
+  const handleProfileUpdated = (profile) => {
+    setSession((current) => {
+      const nextSession = { ...current, ...profile };
       localStorage.setItem("youtube-ai-session", JSON.stringify(nextSession));
-      setSession(nextSession);
-    }} />;
+      return nextSession;
+    });
+  };
+
+  if (!session?.token) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Auth page="login" onAuthenticated={handleAuthenticated} />} />
+        <Route path="/register" element={<Auth page="register" onAuthenticated={handleAuthenticated} />} />
+        <Route path="/verify-email" element={<Auth page="verify" onAuthenticated={handleAuthenticated} />} />
+        <Route path="/auth/google/callback" element={<GoogleCallback onAuthenticated={handleAuthenticated} />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
   }
 
   return (
@@ -41,6 +61,7 @@ function App() {
           <NavLink to="/" className={({ isActive }) => (isActive ? "active-link" : "")}>Home</NavLink>
           <NavLink to="/features" className={({ isActive }) => (isActive ? "active-link" : "")}>Features</NavLink>
           <NavLink to="/about" className={({ isActive }) => (isActive ? "active-link" : "")}>About</NavLink>
+          <NavLink to="/profile" className={({ isActive }) => (isActive ? "active-link" : "")}><UserCircle size={16} /> Profile</NavLink>
           <button className="logout-btn" onClick={handleLogout} title={`Log out ${session.email}`}><LogOut size={16} /> Log out</button>
         </div>
       </nav>
@@ -51,6 +72,12 @@ function App() {
           <Route path="/" element={<Home token={session.token} />} />
           <Route path="/features" element={<Features />} />
           <Route path="/about" element={<About />} />
+          <Route path="/profile" element={<Profile token={session.token} onProfileUpdated={handleProfileUpdated} />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
+          <Route path="/register" element={<Navigate to="/" replace />} />
+          <Route path="/verify-email" element={<Navigate to="/" replace />} />
+          <Route path="/auth/google/callback" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 

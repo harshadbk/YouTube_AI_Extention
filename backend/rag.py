@@ -34,7 +34,7 @@ if not GROQ_API_KEY:
 os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
 # Initialize LLM at module level for reuse
-llm = ChatGroq(model=MODEL, temperature=0)
+llm = ChatGroq(model=MODEL, temperature=0, max_tokens=1200)
 
 def answer_question(
     url: str,
@@ -58,15 +58,15 @@ def answer_question(
         _vector_cache[video_id] = vectorstore
         _transcript_hashes[video_id] = transcript_hash
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
     docs = retriever.invoke(question)
-    context = "\n\n".join(doc.page_content for doc in docs)[:10000]
+    context = "\n\n".join(doc.page_content for doc in docs)[:7000]
 
     # Build LangChain message history from previous turns
     lc_history = []
     if history:
-        for msg in history[-6:]:
-            content = msg["content"][:1500]
+        for msg in history[-4:]:
+            content = msg["content"][:1000]
             if msg["role"] == "user":
                 lc_history.append(HumanMessage(content=content))
             elif msg["role"] == "assistant":
@@ -76,8 +76,14 @@ def answer_question(
     system_msg = SystemMessage(content=f"""You are a friendly and helpful YouTube AI assistant.
 If the user greets you (e.g., "Hi", "Hello"), respond warmly and ask how you can help them with the video.
 
-For video-related questions, answer using the transcript context below. 
-Format responses using Markdown bullet points for lists, summaries, or step-by-step explanations.
+For video-related questions, answer using only the transcript context below when possible.
+Keep answers concise and directly answer the question.
+Use valid GitHub-Flavored Markdown:
+- Use a Markdown table only for genuinely tabular data with consistent columns. Keep each cell short and never put a whole paragraph or code in a table.
+- Use fenced code blocks with a language tag for source code, commands, JSON, SQL, or other code. Never place code in a Markdown table.
+- Use bullet points for lists and short paragraphs for explanations.
+- Close every fenced code block and keep table rows aligned with the header.
+- Do not output raw HTML, extremely wide lines, or unnecessary repetition.
 If the answer is not in the transcript, say you couldn't find it but offer helpful general knowledge if relevant.
 You also have access to the previous conversation — use it to answer follow-up questions naturally.
 

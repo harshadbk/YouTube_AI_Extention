@@ -1,14 +1,18 @@
 import React, { useState } from "react";
 import axios from "axios";
-import { LogIn, UserPlus, Video } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { LogIn, UserPlus, MailCheck, Video } from "lucide-react";
 import { API_URL } from "../config";
 
-function Auth({ onAuthenticated }) {
-  const [mode, setMode] = useState("login");
-  const [email, setEmail] = useState("");
+function Auth({ page, onAuthenticated }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isVerifyPage = page === "verify";
+  const [email, setEmail] = useState(location.state?.email || "");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -17,12 +21,31 @@ function Auth({ onAuthenticated }) {
     setError("");
     setLoading(true);
     try {
-      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
-      const payload = mode === "register" ? { email, password, full_name: fullName, phone } : { email, password };
+      const endpoint = isVerifyPage ? "/auth/verify-email" : page === "login" ? "/auth/login" : "/auth/register";
+      const payload = isVerifyPage
+        ? { email, code: verificationCode }
+        : page === "register" ? { email, password, full_name: fullName, phone } : { email, password };
       const response = await axios.post(`${API_URL}${endpoint}`, payload);
-      onAuthenticated(response.data);
+      if (response.data.verification_required) {
+        navigate("/verify-email", { state: { email } });
+      } else {
+        onAuthenticated(response.data);
+      }
     } catch (requestError) {
       setError(requestError.response?.data?.detail || "Unable to complete that request.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await axios.post(`${API_URL}/auth/resend-verification`, { email });
+      setError("A new verification code was sent.");
+    } catch (requestError) {
+      setError(requestError.response?.data?.detail || "Unable to resend the verification code.");
     } finally {
       setLoading(false);
     }
@@ -34,25 +57,42 @@ function Auth({ onAuthenticated }) {
         <div className="auth-brand"><Video size={28} /><span>YouTube AI Assistant</span></div>
         <div className="auth-heading">
           <p className="eyebrow">Your private workspace</p>
-          <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-          <p>{mode === "login" ? "Continue your personalized video conversations." : "Save your video conversations to your own account."}</p>
+          <h1>{isVerifyPage ? "Check your email" : page === "login" ? "Welcome back" : "Create your account"}</h1>
+          <p>{isVerifyPage ? `Enter the 6-digit code sent to ${email}.` : page === "login" ? "Continue your personalized video conversations." : "Save your video conversations to your own account."}</p>
         </div>
         <form className="auth-form" onSubmit={submit}>
-          {mode === "register" && <>
+          {isVerifyPage ? <>
+            <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label>
+            <label>Verification code<input type="text" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" /></label>
+          </> : <>
+          {page === "register" && <>
             <label>Full name<input type="text" value={fullName} onChange={(event) => setFullName(event.target.value)} required autoComplete="name" /></label>
             <label>Phone number<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" /></label>
           </>}
           <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label>
-          <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+          <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required autoComplete={page === "login" ? "current-password" : "new-password"} /></label>
+          </>}
           {error && <p className="auth-error">{error}</p>}
           <button className="auth-submit" type="submit" disabled={loading}>
-            {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
-            {loading ? "Working..." : mode === "login" ? "Log in" : "Register"}
+            {isVerifyPage ? <MailCheck size={18} /> : page === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
+            {loading ? "Working..." : isVerifyPage ? "Verify email" : page === "login" ? "Log in" : "Register"}
           </button>
         </form>
-        <button className="auth-switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>
-          {mode === "login" ? "Need an account? Register" : "Already have an account? Log in"}
-        </button>
+        {!isVerifyPage && <>
+          <div className="auth-divider"><span>or</span></div>
+          <a className="google-auth-btn" href={`${API_URL}/auth/google/login`}>
+            <span className="google-mark">G</span>
+            Continue with Google
+          </a>
+        </>}
+        {page === "login" && <>
+          <Link className="auth-switch" to="/register">Need an account? Register</Link>
+          <br />
+          <Link className="auth-switch" to="/verify-email" state={{ email }}>Verify your email</Link>
+        </>}
+        {page === "register" && <Link className="auth-switch" to="/login">Already have an account? Log in</Link>}
+        {isVerifyPage && <Link className="auth-switch" to="/login">Back to login</Link>}
+        {isVerifyPage && <button className="auth-switch" type="button" onClick={resendVerification} disabled={loading || !email}>Resend verification code</button>}
       </section>
     </main>
   );
