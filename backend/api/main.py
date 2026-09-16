@@ -440,6 +440,22 @@ async def get_history(user=Depends(current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/history/{url}")
+async def delete_history(url: str, user=Depends(current_user)):
+    try:
+        decoded_url = url
+        try:
+            from urllib.parse import unquote
+            decoded_url = unquote(url)
+        except Exception:
+            pass
+
+        messages.delete_many({"user": user["_id"], "url": decoded_url})
+        return {"deleted": True, "url": decoded_url}
+    except Exception as error:
+        logger.exception("Delete history failed for user %s and url %s", user.get("_id"), url)
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
 @app.get("/transcript")
 async def transcript(url: str, user=Depends(current_user)):
     try:

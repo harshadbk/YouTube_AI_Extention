@@ -8,34 +8,12 @@ import { API_URL } from "../config";
 function Home({ token }) {
   const [url, setUrl] = useState("");
   const [question, setQuestion] = useState("");
-  
-  // History state: { [url]: { title, messages } }
   const [chatHistory, setChatHistory] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(true);
+  const [shareState, setShareState] = useState("Share");
   const chatEndRef = useRef(null);
-
-  // Fetch history from backend on load
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const resp = await axios.get(`${API_URL}/history`, { headers: { Authorization: `Bearer ${token}` } });
-        const history = Array.isArray(resp.data)
-          ? Object.fromEntries(resp.data.map((chat) => [chat.url, { title: chat.title, messages: chat.messages }]))
-          : Object.fromEntries(Object.entries(resp.data).map(([chatUrl, messages]) => [chatUrl, { title: chatUrl, messages }]));
-        setChatHistory(history);
-      } catch (err) {
-        console.error("Failed to load history from database", err);
-      } finally {
-        setFetchingHistory(false);
-      }
-    };
-    fetchHistory();
-  }, [token]);
-
-  const activeChat = chatHistory[url] || { title: "", messages: [] };
-  const messages = activeChat.messages;
 
   const normalizeYouTubeUrl = (input) => {
     if (!input || typeof input !== "string") return "";
@@ -73,23 +51,20 @@ function Home({ token }) {
         return `https://www.youtube.com/watch?v=${videoId}`;
       }
     } catch {
-      // fallback: handle plain URL text without protocol or with query-string wrappers
+      // ignore and fall through to raw pattern extraction
     }
 
-    const generalPatterns = [
+    const patterns = [
       /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([A-Za-z0-9_-]{11})/i,
       /(?:https?:\/\/)?youtu\.be\/([A-Za-z0-9_-]{11})/i,
       /(?:^|[?&])(?:v|video|url|youtube)=https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)?([A-Za-z0-9_-]{11})/i,
       /(?:^|[?&])(?:v|video|url|youtube)=([A-Za-z0-9_-]{11})/i,
     ];
 
-    for (const pattern of generalPatterns) {
+    for (const pattern of patterns) {
       const match = trimmed.match(pattern);
-      if (match) {
-        const extractedId = match[1];
-        if (/^[A-Za-z0-9_-]{11}$/.test(extractedId)) {
-          return `https://www.youtube.com/watch?v=${extractedId}`;
-        }
+      if (match && /^[A-Za-z0-9_-]{11}$/.test(match[1])) {
+        return `https://www.youtube.com/watch?v=${match[1]}`;
       }
     }
 
@@ -97,9 +72,25 @@ function Home({ token }) {
   };
 
   useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const resp = await axios.get(`${API_URL}/history`, { headers: { Authorization: `Bearer ${token}` } });
+        const history = Array.isArray(resp.data)
+          ? Object.fromEntries(resp.data.map((chat) => [chat.url, { title: chat.title, messages: chat.messages }]))
+          : Object.fromEntries(Object.entries(resp.data).map(([chatUrl, messages]) => [chatUrl, { title: chatUrl, messages }]));
+        setChatHistory(history);
+      } catch (err) {
+        console.error("Failed to load history from database", err);
+      } finally {
+        setFetchingHistory(false);
+      }
+    };
+    fetchHistory();
+  }, [token]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const paramValue = params.get("url") || params.get("video") || params.get("youtube");
-
     if (paramValue) {
       const cleaned = normalizeYouTubeUrl(paramValue);
       if (cleaned) {
@@ -108,7 +99,80 @@ function Home({ token }) {
     }
   }, []);
 
-  // Scroll to newest message
+  useEffect(() => {
+    const safeUrl = normalizeYouTubeUrl(url);
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+
+    if (!safeUrl) {
+      if (window.location.search) {
+        window.history.replaceState({}, "", baseUrl);
+      }
+      return;
+    }
+
+    const nextUrl = `${baseUrl}?url=${encodeURIComponent(safeUrl)}`;
+    if (window.location.href !== nextUrl) {
+      window.history.replaceState({}, "", nextUrl);
+    }
+  }, [url]);
+
+  const activeChat = chatHistory[normalizeYouTubeUrl(url)] || { title: "", messages: [] };
+  const messages = activeChat.messages;
+
+  const handleShare = async () => {
+    const safeUrl = normalizeYouTubeUrl(url);
+    if (!safeUrl) return;
+
+    const shareUrl = `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(safeUrl)}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "YouTube AI Assistant",
+          text: "Continue this YouTube chat",
+          url: shareUrl,
+        });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+      setShareState("Copied");
+      window.setTimeout(() => setShareState("Share"), 1200);
+    } catch (error) {
+      if (navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          setShareState("Copied");
+          window.setTimeout(() => setShareState("Share"), 1200);
+        } catch {
+          setShareState("Share");
+        }
+      }
+    }
+  };
+
+  const handleDeleteChat = async (chatUrl) => {
+    if (!chatUrl) return;
+
+    const deleteUrl = encodeURIComponent(chatUrl);
+    try {
+      await axios.delete(`${API_URL}/history/${deleteUrl}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setChatHistory((prev) => {
+        const next = { ...prev };
+        delete next[chatUrl];
+        return next;
+      });
+
+      if (url === chatUrl) {
+        setUrl("");
+      }
+    } catch (error) {
+      console.error("Failed to delete chat", error);
+    }
+  };
+
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -124,15 +188,14 @@ function Home({ token }) {
 
     setUrl(cleanedUrl);
 
-    // Optimistic UI update
     setChatHistory(prev => ({
       ...prev,
-      [cleanedUrl]: { ...chatHistory[cleanedUrl], messages: [...(chatHistory[cleanedUrl]?.messages || []), userMsg] }
+      [cleanedUrl]: { ...prev[cleanedUrl], messages: [...(prev[cleanedUrl]?.messages || []), userMsg] }
     }));
-    
+
     setLoading(true);
     setQuestion("");
-    
+
     try {
       const transcriptResponse = await axios.get(`${API_URL}/transcript`, {
         params: { url: cleanedUrl },
@@ -145,7 +208,7 @@ function Home({ token }) {
         transcript_text: transcriptResponse.data.transcript_text,
       }, { headers: { Authorization: `Bearer ${token}` } });
       const aiMsg = { role: "assistant", content: resp.data.answer };
-      
+
       setChatHistory(prev => ({
         ...prev,
         [cleanedUrl]: { title: resp.data.title || prev[cleanedUrl]?.title || cleanedUrl, messages: [...(prev[cleanedUrl]?.messages || []), aiMsg] }
@@ -213,11 +276,23 @@ function Home({ token }) {
             <div
               key={chatUrl}
               className={`history-item ${url === chatUrl ? 'active' : ''}`}
-              onClick={() => loadChat(chatUrl)}
               title={chatHistory[chatUrl].title}
             >
-              <Video size={16} className="history-icon" />
-              <div className="history-url">{chatHistory[chatUrl].title}</div>
+              <div className="history-item-main" onClick={() => loadChat(chatUrl)} style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                <Video size={16} className="history-icon" />
+                <div className="history-url">{chatHistory[chatUrl].title}</div>
+              </div>
+              <button
+                className="delete-history-btn"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleDeleteChat(chatUrl);
+                }}
+                aria-label={`Delete chat for ${chatHistory[chatUrl].title}`}
+                title="Delete chat"
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>
@@ -229,6 +304,9 @@ function Home({ token }) {
         </button>
         <Video className="header-icon" size={24} />
         <h2>{url ? "Active Chat" : "New Chat"}</h2>
+        <button className="share-btn" onClick={handleShare} disabled={!normalizeYouTubeUrl(url)}>
+          {shareState}
+        </button>
       </header>
       
       <div className="chat-container">
