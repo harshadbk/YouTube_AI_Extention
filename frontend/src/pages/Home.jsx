@@ -258,7 +258,6 @@ function Home({ token }) {
   
   const loadChat = (targetUrl) => {
     setUrl(targetUrl);
-    setSidebarOpen(false);
   };
 
   const markdownComponents = {
