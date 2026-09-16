@@ -14,11 +14,13 @@ function Auth({ page, onAuthenticated }) {
   const [phone, setPhone] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   const submit = async (event) => {
     event.preventDefault();
     setError("");
+    setNotice("");
     setLoading(true);
     try {
       const endpoint = isVerifyPage ? "/auth/verify-email" : page === "login" ? "/auth/login" : "/auth/register";
@@ -40,10 +42,11 @@ function Auth({ page, onAuthenticated }) {
 
   const resendVerification = async () => {
     setError("");
+    setNotice("");
     setLoading(true);
     try {
       await axios.post(`${API_URL}/auth/resend-verification`, { email });
-      setError("A new verification code was sent.");
+      setNotice("A new verification code was sent. Check your inbox and spam folder.");
     } catch (requestError) {
       setError(requestError.response?.data?.detail || "Unable to resend the verification code.");
     } finally {
@@ -73,6 +76,7 @@ function Auth({ page, onAuthenticated }) {
           <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required autoComplete={page === "login" ? "current-password" : "new-password"} /></label>
           </>}
           {error && <p className="auth-error">{error}</p>}
+          {notice && <p className="auth-notice">{notice}</p>}
           <button className="auth-submit" type="submit" disabled={loading}>
             {isVerifyPage ? <MailCheck size={18} /> : page === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
             {loading ? "Working..." : isVerifyPage ? "Verify email" : page === "login" ? "Log in" : "Register"}

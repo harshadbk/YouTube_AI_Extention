@@ -151,6 +151,12 @@
   margin: -4px 0 0;
 }
 
+.auth-notice {
+  color: #16803c;
+  font-size: 13px;
+  margin: -4px 0 0;
+}
+
 .auth-submit {
   border: 0;
   border-radius: 8px;

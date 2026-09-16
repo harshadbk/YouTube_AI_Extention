@@ -126,18 +126,40 @@ def send_verification_email(email: str, code: str):
         headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
         json={
             "personalizations": [{"to": [{"email": email}]}],
-            "from": {"email": SENDGRID_FROM_EMAIL},
+            "from": {"email": SENDGRID_FROM_EMAIL, "name": "YouTube AI Assistant"},
+            "reply_to": {"email": SENDGRID_FROM_EMAIL, "name": "YouTube AI Assistant"},
             "subject": "Your YouTube AI Assistant verification code",
             "content": [{
                 "type": "text/plain",
-                "value": f"Your verification code is {code}. It expires in {VERIFICATION_CODE_TTL_MINUTES} minutes.",
+                "value": (
+                    f"Your YouTube AI Assistant verification code is {code}.\n\n"
+                    f"This code expires in {VERIFICATION_CODE_TTL_MINUTES} minutes."
+                ),
+            }, {
+                "type": "text/html",
+                "value": (
+                    f"<p>Your YouTube AI Assistant verification code is:</p>"
+                    f"<p style='font-size:28px;font-weight:bold;letter-spacing:6px'>{code}</p>"
+                    f"<p>This code expires in {VERIFICATION_CODE_TTL_MINUTES} minutes.</p>"
+                ),
             }],
         },
-        timeout=10,
+        timeout=15,
     )
     if response.status_code >= 300:
         logger.error("SendGrid rejected verification email: %s", response.text)
-        raise RuntimeError("Unable to send verification email")
+        try:
+            details = response.json().get("errors", [])
+            message = details[0].get("message", "SendGrid rejected the request") if details else "SendGrid rejected the request"
+        except ValueError:
+            message = "SendGrid rejected the request"
+        raise RuntimeError(f"SendGrid error ({response.status_code}): {message}")
+    logger.info(
+        "Verification email accepted by SendGrid for %s with status %s and message id %s",
+        email,
+        response.status_code,
+        response.headers.get("X-Message-Id", "unknown"),
+    )
 
 def create_token(user_id: str):
     return jwt.encode({"sub": user_id}, JWT_SECRET, algorithm="HS256")
@@ -192,7 +214,7 @@ async def register(req: AuthRequest):
     except Exception as error:
         users.delete_one({"_id": user_id})
         logger.exception("Verification email failed for %s", email)
-        raise HTTPException(status_code=502, detail="Unable to send verification email") from error
+        raise HTTPException(status_code=502, detail=str(error)) from error
     return {"verification_required": True, "email": email}
 
 @app.get("/auth/google/login")
@@ -316,7 +338,7 @@ async def resend_verification(req: ResendVerificationRequest):
         send_verification_email(email, verification_code)
     except Exception as error:
         logger.exception("Verification email resend failed for %s", email)
-        raise HTTPException(status_code=502, detail="Unable to send verification email") from error
+        raise HTTPException(status_code=502, detail=str(error)) from error
     return {"verification_required": True, "email": email}
 
 @app.post("/auth/login")
