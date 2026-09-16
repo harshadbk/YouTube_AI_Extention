@@ -61,7 +61,7 @@ function App() {
           <h1>YouTube AI Assistant</h1>
         </Link>
         <button
-          className="mobile-nav-toggle"
+          className={`mobile-nav-toggle ${mobileNavOpen ? "is-open" : ""}`}
           onClick={() => setMobileNavOpen((open) => !open)}
           aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
           aria-expanded={mobileNavOpen}

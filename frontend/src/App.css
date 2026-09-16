@@ -379,6 +379,17 @@
   display: none;
 }
 
+@keyframes mobileNavDrop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (min-width: 769px) {
   .app-wrapper.sidebar-closed {
     grid-template-columns: 0 minmax(0, 1fr);
@@ -1141,6 +1152,7 @@
     padding: 10px 14px;
     min-height: 52px;
     gap: 8px;
+    position: sticky;
   }
 
   .nav-brand h1 {
@@ -1165,12 +1177,54 @@
 
   .nav-links.mobile-nav-open {
     display: flex;
-    width: 100%;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 10px;
+    right: 10px;
     flex-direction: column;
     align-items: stretch;
     gap: 4px;
-    padding: 8px 0 2px;
-    border-top: 1px solid var(--border-color);
+    padding: 8px;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    animation: mobileNavDrop 0.22s ease-out both;
+  }
+
+  .nav-links.mobile-nav-open a,
+  .nav-links.mobile-nav-open .logout-btn {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-links.mobile-nav-open a:hover,
+  .nav-links.mobile-nav-open a.active-link,
+  .nav-links.mobile-nav-open .logout-btn:hover {
+    background: var(--surface-hover);
+  }
+
+  .nav-links.mobile-nav-open .logout-btn {
+    justify-content: flex-start;
+    font-size: 15px;
+  }
+
+  .mobile-nav-toggle {
+    transition: transform 0.22s ease, background-color 0.2s ease;
+  }
+
+  .mobile-nav-toggle:hover,
+  .mobile-nav-toggle.is-open {
+    background: var(--surface-hover);
+  }
+
+  .mobile-nav-toggle.is-open {
+    transform: rotate(90deg);
   }
 
   .main-content {
