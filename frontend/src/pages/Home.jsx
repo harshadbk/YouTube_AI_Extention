@@ -9,7 +9,7 @@ function Home({ token }) {
   const [url, setUrl] = useState("");
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState({});
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
   const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(true);
   const [shareState, setShareState] = useState("Share");
@@ -167,9 +167,10 @@ function Home({ token }) {
     const chatUrl = deleteConfirmUrl;
     if (!chatUrl) return;
 
-    const normalizedDeleteTarget = normalizeYouTubeUrl(chatUrl) || chatUrl;
-    const deleteUrl = encodeURIComponent(normalizedDeleteTarget);
+    setDeleteConfirmUrl(null);
+    setDeleteConfirmTitle("");
 
+    const normalizedDeleteTarget = normalizeYouTubeUrl(chatUrl) || chatUrl;
     const nextHistory = { ...chatHistory };
     Object.keys(nextHistory).forEach((key) => {
       if (normalizeYouTubeUrl(key) === normalizedDeleteTarget || key === chatUrl) {
@@ -183,14 +184,12 @@ function Home({ token }) {
     }
 
     try {
-      await axios.delete(`${API_URL}/history/${deleteUrl}`, {
+      await axios.delete(`${API_URL}/history`, {
+        params: { url: normalizedDeleteTarget },
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch (error) {
       console.error("Failed to delete chat", error);
-    } finally {
-      setDeleteConfirmUrl(null);
-      setDeleteConfirmTitle("");
     }
   };
 
@@ -271,7 +270,7 @@ function Home({ token }) {
   };
 
   return (
-    <div className="app-wrapper">
+    <div className={`app-wrapper ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
       {/* Sidebar Overlay */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
       

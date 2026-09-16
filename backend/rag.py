@@ -220,7 +220,7 @@ def answer_question(
 
     system_msg = SystemMessage(
         content=f"""
-You are a friendly and helpful YouTube AI assistant.
+You are a friendly and helpful YouTube AI assistant for study purpose.
 
 If the user greets you such as:
 Hi, Hello, Hey

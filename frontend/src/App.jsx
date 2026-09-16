@@ -85,7 +85,7 @@ function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <div>&copy; 2026 YouTube AI Assistant. { /*Developed by <strong>Harshad Khatale</strong>.*/}</div>
+        <div>&copy; 2026 YouTube AI Assistant. Developed by <strong>Vivek Kumbhar</strong>.</div>
         <div className="footer-links">
           <a>Privacy Policy</a>
           <a>Terms of Service</a>

@@ -453,7 +453,7 @@ def normalize_video_url(value: str | None) -> str:
         return f"https://www.youtube.com/watch?v={match.group(1)}"
     return text.rstrip("/")
 
-@app.delete("/history/{url}")
+@app.delete("/history")
 async def delete_history(url: str, user=Depends(current_user)):
     try:
         from urllib.parse import unquote
