@@ -96,17 +96,15 @@ function App() {
         </Routes>
       </main>
 
-      {!isChatPage && (
-        <footer className="footer">
-          <div>&copy; 2026 YouTube AI Assistant. Developed by <strong>Vivek Kumbhar</strong>.</div>
-          <div className="footer-links">
-            <a>Privacy Policy</a>
-            <a>Terms of Service</a>
-            <a><Globe size={18} /></a>
-            <a><Share2 size={18} /></a>
-          </div>
-        </footer>
-      )}
+      <footer className="footer">
+        <div>&copy; 2026 YouTube AI Assistant. Developed by <strong>Vivek Kumbhar</strong>.</div>
+        <div className="footer-links">
+          <a>Privacy Policy</a>
+          <a>Terms of Service</a>
+          <a><Globe size={18} /></a>
+          <a><Share2 size={18} /></a>
+        </div>
+      </footer>
     </div>
   );
 }

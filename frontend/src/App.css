@@ -6,13 +6,11 @@
 }
 
 .website-container.chat-layout {
-  height: 100dvh;
-  min-height: 0;
-  overflow: hidden;
+  min-height: 100vh;
 }
 
 .chat-layout .main-content {
-  overflow: hidden;
+  min-height: 0;
 }
 
 /* Navbar */
@@ -1295,10 +1293,7 @@
   }
 
   .footer {
-    padding: 24px 20px;
-    gap: 16px;
-    flex-direction: column;
-    text-align: center;
+    display: none;
   }
 }
 
