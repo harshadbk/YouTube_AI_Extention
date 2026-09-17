@@ -399,6 +399,10 @@
 }
 
 @media (min-width: 769px) {
+  .chat-layout .app-wrapper {
+    margin-bottom: 32px;
+  }
+
   .app-wrapper.sidebar-closed {
     grid-template-columns: 0 minmax(0, 1fr);
   }
@@ -1245,6 +1249,12 @@
     height: calc(100dvh - 74px);
     min-height: 520px;
     border-radius: 8px;
+  }
+
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
   }
 
   .sidebar {

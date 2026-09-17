@@ -95,7 +95,6 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-
       <footer className="footer">
         <div>&copy; 2026 YouTube AI Assistant. Developed by <strong>Vivek Kumbhar</strong>.</div>
         <div className="footer-links">
