@@ -9,7 +9,7 @@ function Home({ token }) {
   const [url, setUrl] = useState("");
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState({});
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(true);
   const [shareState, setShareState] = useState("Share");
@@ -250,12 +250,13 @@ function Home({ token }) {
   
   const startNewChat = () => {
     setUrl("");
-    setSidebarOpen(false);
   };
   
   const loadChat = (targetUrl) => {
     setUrl(targetUrl);
-    setSidebarOpen(false);
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
   };
 
   const markdownComponents = {
@@ -381,6 +382,7 @@ function Home({ token }) {
             <input
               type="text"
               placeholder="Paste YouTube URL here..."
+              autoComplete="off"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               className="input url-input"
@@ -393,6 +395,7 @@ function Home({ token }) {
               <input
                 type="text"
                 placeholder="Ask a question..."
+                autoComplete="off"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 className="input question-input"
