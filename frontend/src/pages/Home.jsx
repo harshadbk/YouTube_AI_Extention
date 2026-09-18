@@ -9,7 +9,7 @@ function Home({ token }) {
   const [url, setUrl] = useState("");
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState({});
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
   const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(true);
   const [shareState, setShareState] = useState("Share");
