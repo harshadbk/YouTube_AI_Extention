@@ -399,10 +399,6 @@
 }
 
 @media (min-width: 769px) {
-  .chat-layout .app-wrapper {
-    margin-bottom: 32px;
-  }
-
   .app-wrapper.sidebar-closed {
     grid-template-columns: 0 minmax(0, 1fr);
   }
