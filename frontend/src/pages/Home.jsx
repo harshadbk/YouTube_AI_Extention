@@ -267,6 +267,9 @@ function Home({ token }) {
     ),
   };
 
+  const normalizeAssistantContent = (content) =>
+    String(content || "").replace(/<br\s*\/?>/gi, "  \n");
+
   return (
     <div className={`app-wrapper ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
       {/* Sidebar Overlay */}
@@ -356,7 +359,9 @@ function Home({ token }) {
               {msg.role === "user" && <div className="message-avatar"><User size={18} /></div>}
               <div className="message-content">
                 {msg.role === "assistant" ? (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {normalizeAssistantContent(msg.content)}
+                  </ReactMarkdown>
                 ) : (
                   msg.content
                 )}

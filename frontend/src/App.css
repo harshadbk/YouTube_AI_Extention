@@ -1240,14 +1240,14 @@
   }
 
   .main-content {
-    padding: 8px 6px;
+    padding: 8px 6px 0;
   }
 
   .app-wrapper {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 74px);
-    min-height: 520px;
+    height: calc(100dvh - 60px);
+    min-height: 0;
     border-radius: 8px;
   }
 
@@ -1289,7 +1289,7 @@
   }
 
   .input-area {
-    padding: 10px 8px;
+    padding: 10px 8px 0;
     gap: 8px;
   }
 
@@ -1346,8 +1346,8 @@
   }
 
   .app-wrapper {
-    height: calc(100dvh - 62px);
-    min-height: 460px;
+    height: calc(100dvh - 60px);
+    min-height: 0;
   }
 
   .app-header {
@@ -1374,7 +1374,7 @@
   }
 
   .input-area {
-    padding: 8px 6px;
+    padding: 8px 6px 0;
   }
 
   .input-area > div:last-child {
